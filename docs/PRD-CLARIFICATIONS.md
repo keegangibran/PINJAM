@@ -129,3 +129,29 @@ PRD Bagian 7.1 & Aturan Workspace menegaskan bahwa mahasiswa yang belum memiliki
    - Foto fisik pada KTM/KTP yang ditunjukkan mahasiswa.
    - Data nama dan NIM yang diinput pada formulir.
 3. Seluruh proses tidak mengandalkan kecerdasan buatan atau pemindaian biometrik otomatis untuk menjamin privasi dan kepatuhan terhadap PRD.
+
+
+---
+
+## 8. Alur Serah-Terima Jabatan Ketua Kelas / TRANSFER (GAP-07)
+
+### Latar Belakang & Penyelarasan
+Terdapat potensi ambiguitas antara perlakuan klaim `TRANSFER` pada teks PRD dan kemungkinan interpretasi alur proposal 2-langkah (*requester propose -> receiver accept*).
+- PRD Revisi 3 Bagian 3.1 FR-01E menyatakan: *"Ketua kelas aktif dapat mengalihkan jabatan ke mahasiswa berstatus ACTIVE pada kelas yang sama. Pengalihan berlaku seketika, mencabut QR ketua lama, dan tercatat di audit log."*
+- PRD Revisi 3 Bagian 5.1 Alur 1 menetapkan: *"Serah-terima jabatan: ketua aktif memilih rekan sekelas berstatus ACTIVE, jabatan pindah seketika, QR ketua lama dicabut, kejadian masuk audit log."*
+- PRD Revisi 3 Bagian 7.2 menetapkan: `class_leader_claims.decided_by: Null untuk TRANSFER yang otomatis`.
+- PRD Revisi 3 Bagian 7.3 menetapkan endpoint tunggal: `POST /api/students/me/leader/transfer` dengan input `target_student_id` yang menghasilkan efek langsung *"Jabatan pindah; QR lama dicabut"*.
+
+### Keputusan Desain
+1. **Operasi 1-Langkah Langsung & Atomik**:
+   - Ketua kelas aktif memilih rekan sekelasnya yang berstatus `ACTIVE` pada kelas yang sama (`current_class_id = class.id`).
+   - Sebelum permohonan dikirimkan, antarmuka klien menampilkan modal konfirmasi eksplisit dengan peringatan bahwa jabatan ketua dan QR Pass milik pemohon akan langsung dicabut seketika.
+   - Endpoint `POST /api/students/me/leader/transfer` menjalankan fungsi transaksi atomik di basis data:
+     a. Memvalidasi bahwa pemohon adalah ketua kelas aktif dari kelas bersangkutan.
+     b. Memvalidasi bahwa mahasiswa target berstatus `ACTIVE`, berada pada kelas yang sama, dan bukan diri sendiri (`target_id != caller_id`).
+     c. Mengunci baris `classes` (`FOR UPDATE`) untuk mencegah *race condition* serah-terima ganda.
+     d. Memperbarui `classes.leader_student_id = target_id` dan `classes.leader_since = now()`.
+     e. Menaikkan versi token ketua lama secara atomik (`students.qr_token_version = qr_token_version + 1`) agar seluruh QR Pass yang pernah diterbitkan ketua lama langsung ditolak server (*instant revocation*).
+     f. Mencatat baris pada tabel `class_leader_claims` dengan `claim_type = 'TRANSFER'`, `status = 'APPROVED'`, `decided_by = NULL`, dan `decided_at = now()`.
+     g. Menulis entri audit log `LEADER_TRANSFERRED`.
+2. Tidak diterapkan alur perantara `PENDING` yang menunggu persetujuan penerima, sehingga integritas kelas (*tepat 1 ketua aktif per kelas*) selalu terjaga tanpa adanya periode transisi tanpa kejelasan kepemilikan peran (*ambiguous leader ownership*).

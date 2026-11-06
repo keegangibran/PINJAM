@@ -10,11 +10,13 @@ describe('Database SQL Migrations & Schema Validation', () => {
   const migration2Path = path.join(migrationsDir, '20261106000002_rls_policies.sql');
   const migration3Path = path.join(migrationsDir, '20261106000003_storage_setup.sql');
   const migration4Path = path.join(migrationsDir, '20261106000004_atomic_transactions.sql');
+  const migration5Path = path.join(migrationsDir, '20261106000005_class_leader_transfer.sql');
 
   const migration1Sql = fs.readFileSync(migration1Path, 'utf-8');
   const migration2Sql = fs.readFileSync(migration2Path, 'utf-8');
   const migration3Sql = fs.readFileSync(migration3Path, 'utf-8');
   const migration4Sql = fs.readFileSync(migration4Path, 'utf-8');
+  const migration5Sql = fs.readFileSync(migration5Path, 'utf-8');
   const seedSql = fs.readFileSync(seedFile, 'utf-8');
 
   it('E-1: Migration 1 mendefinisikan seluruh 10 tabel domain yang diwajibkan PRD', () => {
@@ -108,6 +110,17 @@ describe('Database SQL Migrations & Schema Validation', () => {
     expect(seedSql).toContain("'storage_monitoring'");
     expect(seedSql).not.toContain('INSERT INTO public.students'); // Tanpa dummy user
     expect(seedSql).not.toContain('INSERT INTO public.loans'); // Tanpa dummy loans
+  });
+
+  it('E-9: Migration 5 mendefinisikan transfer_class_leader dan revoke_student_qr_pass secara atomik', () => {
+    expect(migration5Sql).toContain('CREATE OR REPLACE FUNCTION public.transfer_class_leader');
+    expect(migration5Sql).toContain('CREATE OR REPLACE FUNCTION public.revoke_student_qr_pass');
+    expect(migration5Sql).toContain('FOR UPDATE'); // Row-level locking on classes
+    expect(migration5Sql).toContain('SECURITY DEFINER');
+    expect(migration5Sql).toContain('SET search_path = public, pg_temp');
+    expect(migration5Sql).toContain('LEADER_TRANSFERRED');
+    expect(migration5Sql).toContain('QR_REVOKED');
+    expect(migration5Sql).toContain('qr_token_version + 1');
   });
 });
 
