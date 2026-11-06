@@ -220,3 +220,4 @@ $$;
 -- 3. Hak Akses Eksekusi
 GRANT EXECUTE ON FUNCTION public.transfer_class_leader(uuid, uuid, text) TO authenticated, service_role;
 GRANT EXECUTE ON FUNCTION public.revoke_student_qr_pass(uuid) TO authenticated, service_role;
+
