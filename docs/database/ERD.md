@@ -192,3 +192,4 @@ erDiagram
 4. **Satu Calon Ketua Awal per Kelas**:
    `CREATE UNIQUE INDEX idx_claims_one_pending_initial ON class_leader_claims (class_id) WHERE claim_type = 'INITIAL' AND status = 'PENDING';`
    *Tujuan*: Menegakkan aturan pendaftar pertama (`INITIAL`) per kelas yang belum punya ketua; pendaftar berikutnya otomatis menjadi `REPLACEMENT`.
+

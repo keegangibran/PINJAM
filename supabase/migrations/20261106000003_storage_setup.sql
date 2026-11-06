@@ -53,3 +53,4 @@ USING (
     OR public.is_active_admin()
   )
 );
+

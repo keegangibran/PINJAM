@@ -94,3 +94,4 @@ Request Masuk
 ```
 
 Urutan penguncian konsisten (`projectors` → `kiosk_sessions` → `students` → `loans`) mencegah terjadinya kebuntuan (*deadlock*).
+

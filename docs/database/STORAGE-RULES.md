@@ -53,3 +53,4 @@ smartprojex-media/
 2. Setiap kali petugas/admin membuka foto di antarmuka buku besar digital atau antrean verifikasi, aplikasi memanggil endpoint `POST /api/admin/photos/sign`.
 3. Server memverifikasi otorisasi petugas, mencatat entri `PHOTO_SIGNED_URL` ke tabel `audit_logs`, lalu menerbitkan **Signed URL dengan masa berlaku maksimal 60 detik**.
 4. URL kedaluwarsa setelah 60 detik sehingga tautan tidak dapat dibagikan keluar sesi.
+

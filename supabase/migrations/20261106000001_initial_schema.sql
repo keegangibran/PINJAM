@@ -290,3 +290,4 @@ CREATE TABLE public.app_settings (
 CREATE TRIGGER trigger_app_settings_updated_at
 BEFORE UPDATE ON public.app_settings
 FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+

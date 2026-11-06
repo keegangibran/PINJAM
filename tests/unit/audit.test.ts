@@ -106,3 +106,4 @@ describe('Audit Logging Module (src/lib/audit.ts)', () => {
     expect(result.error).toBe('Database connection timeout');
   });
 });
+

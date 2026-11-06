@@ -257,3 +257,4 @@ CREATE POLICY "admin_manage_settings" ON public.app_settings
 FOR ALL TO authenticated
 USING (public.is_active_admin())
 WITH CHECK (public.is_active_admin());
+

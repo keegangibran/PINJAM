@@ -96,3 +96,4 @@ Pada tabel `loans`, ditambahkan kolom `issue_resolved_at timestamptz NULL`.
 - Ketika petugas/admin memeriksa fisik unit dan mengembalikan proyektor dari status `MAINTENANCE` kembali ke `AVAILABLE`, `issue_resolved_at` diisi `now()`.
 - Tugas cron retensi foto hanya menghapus foto transaksi jika:
   `status = 'COMPLETED' AND returned_at < now() - interval '180 days' AND (return_condition = 'NORMAL' OR issue_resolved_at IS NOT NULL)`.
+

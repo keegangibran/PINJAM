@@ -110,3 +110,4 @@ describe('Database SQL Migrations & Schema Validation', () => {
     expect(seedSql).not.toContain('INSERT INTO public.loans'); // Tanpa dummy loans
   });
 });
+

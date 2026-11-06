@@ -218,3 +218,4 @@ Menyimpan pengaturan sistem operasional (jam operasional TU, durasi fallback, se
 | `description` | `text` | YES | `NULL` | - | Keterangan fungsi pengaturan |
 | `updated_by` | `uuid` | YES | `NULL` | FK → `staff_profiles(id)` ON DELETE SET NULL | Admin yang terakhir mengubah |
 | `updated_at` | `timestamptz` | NO | `now()` | - | Waktu terakhir pengaturan diperbarui |
+

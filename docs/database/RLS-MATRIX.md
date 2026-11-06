@@ -43,3 +43,4 @@ Fungsi otorisasi dieksekusi dengan atribut `SECURITY DEFINER` dan membatasi `sea
 - **`loans`**: Operasi `DELETE` diblokir 100% untuk seluruh role. Data transaksi bersifat permanen untuk akuntabilitas aset. Pembersihan foto mengikuti jadwal retensi.
 - **`projector_status_logs` & `audit_logs`**: Operasi `UPDATE` dan `DELETE` diblokir 100% (*append-only*).
 - **`projectors`, `classes`, `staff_profiles`**: Menggunakan *soft deactivation* (`is_active = false` atau `status = 'INACTIVE'`).
+
