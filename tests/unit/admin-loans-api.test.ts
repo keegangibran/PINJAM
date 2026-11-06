@@ -174,3 +174,4 @@ describe('Admin Loans Ledger API (GET /api/admin/loans)', () => {
     expect(data.loans[0].student.name).toBe('Keegan Mahasiswa');
   });
 });
+
