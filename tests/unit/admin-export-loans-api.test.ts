@@ -131,4 +131,47 @@ describe('Admin Export Loans CSV API (GET /api/admin/export/loans)', () => {
       })
     );
   });
+
+  it('sanitizes untrusted input against CSV Formula Injection (CWE-1236)', async () => {
+    const maliciousLoans = [
+      {
+        id: 'loan-vuln',
+        borrowed_at: '2026-11-06T08:00:00Z',
+        due_at: '2026-11-06T10:00:00Z',
+        returned_at: '2026-11-06T09:00:00Z',
+        status: 'COMPLETED',
+        borrow_identification_method: 'QR',
+        returned_by_type: 'REPRESENTATIVE',
+        returned_by_name: '=cmd|"/C calc"!A0', // Formula attack
+        return_condition: 'REPORTED_ISSUE',
+        damage_notes: '+1234567890-SUM(1,2)', // Formula attack
+        student: { id: 'std-1', nim: '4223121001', name: '@attacker' },
+        class: { id: 'cls-1', study_program: 'Ilmu Komputer', cohort_year: 2024, section: 'A', academic_term: '2026/2027-GANJIL' },
+        projector: { id: 'prj-1', code: 'PROJ-01', name: 'Epson' },
+        borrow_staff: { id: 'stf-1', name: 'Petugas' },
+        return_staff: { id: 'stf-2', name: 'Petugas' },
+      },
+    ];
+
+    const queryBuilder: Record<string, unknown> = {};
+    queryBuilder.gte = vi.fn().mockReturnValue(queryBuilder);
+    queryBuilder.lte = vi.fn().mockReturnValue(queryBuilder);
+    queryBuilder.order = vi.fn().mockResolvedValue({ data: maliciousLoans, error: null });
+
+    mockAdminFrom.mockReturnValueOnce({
+      select: vi.fn().mockReturnValue(queryBuilder),
+    });
+
+    const req = new NextRequest('http://localhost/api/admin/export/loans');
+    const res = await exportLoans(req);
+    const arrayBuffer = await res.arrayBuffer();
+    const csvText = new TextDecoder().decode(new Uint8Array(arrayBuffer));
+    const lines = csvText.replace(/^\uFEFF/, '').split('\r\n');
+    const row = lines[1];
+
+    // Formula injection cells must be prepended with a single quote '
+    expect(row).toContain('"\'=cmd|""/C calc""!A0"');
+    expect(row).toContain('"\'@attacker"');
+    expect(row).toContain('"\'+1234567890-SUM(1,2)"');
+  });
 });

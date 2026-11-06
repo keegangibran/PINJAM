@@ -17,7 +17,9 @@ export type AuditAction =
   | 'PROJECTOR_STATUS_CHANGED'
   | 'PROJECTOR_ASSET_MODIFIED'
   | 'SETTINGS_UPDATED'
-  | 'LOANS_EXPORTED';
+  | 'LOANS_EXPORTED'
+  | 'RETENTION_CLEANUP_EXECUTED'
+  | 'STORAGE_WARNING';
 
 export interface AuditLogParams {
   action: AuditAction;

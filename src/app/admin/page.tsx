@@ -58,6 +58,32 @@ interface LoanRecord {
   } | null;
 }
 
+interface MaintenanceStatusData {
+  retention_last_run: {
+    last_run_at?: string;
+    status?: string;
+    deleted_document_photos?: number;
+    deleted_face_photos?: number;
+    deleted_loan_photos?: number;
+    expired_leaders_revoked?: number;
+    storage_usage_bytes?: number;
+    storage_usage_pct?: number;
+    storage_warning_active?: boolean;
+    failures?: string[] | null;
+  } | null;
+  storage_monitoring: {
+    current_usage_bytes?: number;
+    current_usage_pct?: number;
+    warning_active?: boolean;
+    warning_threshold_pct?: number;
+    max_capacity_bytes?: number;
+  } | null;
+  academic_term: {
+    current_term?: string;
+    term_ends_at?: string;
+  } | null;
+}
+
 export default function AdminDashboardPage() {
   const [summary, setSummary] = useState<SummaryData>({
     total_projectors: 0,
@@ -75,6 +101,11 @@ export default function AdminDashboardPage() {
   const [searchQuery, setSearchQuery] = useState('');
   const [fromDate, setFromDate] = useState('');
   const [toDate, setToDate] = useState('');
+
+  // Maintenance & Storage Status
+  const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatusData | null>(null);
+  const [maintenanceRunning, setMaintenanceRunning] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
 
   // Photo modal state
   const [selectedLoanForPhotos, setSelectedLoanForPhotos] = useState<LoanRecord | null>(null);
@@ -131,9 +162,22 @@ export default function AdminDashboardPage() {
     }
   }, [statusFilter, fromDate, toDate, searchQuery]);
 
+  const fetchMaintenanceStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/admin/maintenance/status');
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setMaintenanceData(json.data);
+      }
+    } catch {
+      // Non-blocking
+    }
+  }, []);
+
   useEffect(() => {
     fetchLoans();
-  }, [fetchLoans]);
+    fetchMaintenanceStatus();
+  }, [fetchLoans, fetchMaintenanceStatus]);
 
   // Request signed URL saat membuka modal foto
   const openPhotoModal = async (loan: LoanRecord) => {
@@ -186,6 +230,35 @@ export default function AdminDashboardPage() {
     window.location.href = `/api/admin/export/loans?${params.toString()}`;
     setIsExportModalOpen(false);
   };
+
+  const triggerManualMaintenance = async () => {
+    if (!confirm('Jalankan proses pembersihan retensi foto kedaluwarsa dan pemeliharaan sistem sekarang?')) {
+      return;
+    }
+
+    setMaintenanceRunning(true);
+    setMaintenanceMessage(null);
+
+    try {
+      const res = await fetch('/api/cron/retention', { method: 'POST' });
+      const data = await res.json();
+
+      if (!res.ok) {
+        setMaintenanceMessage(`Gagal: ${data.error?.message || 'Terjadi kesalahan sistem.'}`);
+      } else {
+        setMaintenanceMessage('Pembersihan retensi dan pemeliharaan berhasil dijalankan!');
+        fetchLoans();
+        fetchMaintenanceStatus();
+      }
+    } catch {
+      setMaintenanceMessage('Gangguan jaringan saat memicu pemeliharaan.');
+    } finally {
+      setMaintenanceRunning(false);
+    }
+  };
+
+  const storageUsagePct = maintenanceData?.storage_monitoring?.current_usage_pct || 0;
+  const isStorageWarning = maintenanceData?.storage_monitoring?.warning_active || storageUsagePct >= 70;
 
   return (
     <div className="min-h-screen p-6 md:p-8 bg-slate-50 text-slate-900">
@@ -311,6 +384,106 @@ export default function AdminDashboardPage() {
             </button>
           </div>
         )}
+
+        {/* Scheduled Maintenance & Storage Quota Monitoring Section (FR-20, NFR-08, NFR-10) */}
+        <div className="bg-white rounded-xl border border-slate-200 p-4 shadow-sm space-y-3">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
+            <div className="flex items-center gap-2">
+              <span className="p-1.5 bg-slate-100 text-slate-700 rounded-lg">
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm0 4h16M9 4v3m6-3v3" />
+                </svg>
+              </span>
+              <div>
+                <h3 className="text-xs font-bold text-slate-800">Pemeliharaan Terjadwal & Kuota Storage (NFR-10)</h3>
+                <p className="text-[11px] text-slate-500">
+                  Retensi harian foto kedaluwarsa &amp; pemantauan kapasitas media Supabase Free-Tier (1 GB).
+                </p>
+              </div>
+            </div>
+
+            <div className="flex items-center gap-2 self-start sm:self-center">
+              <button
+                onClick={triggerManualMaintenance}
+                disabled={maintenanceRunning}
+                className="px-3 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
+              >
+                <svg className={`w-3.5 h-3.5 ${maintenanceRunning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                </svg>
+                {maintenanceRunning ? 'Memproses...' : 'Jalankan Retensi Sekarang'}
+              </button>
+            </div>
+          </div>
+
+          {maintenanceMessage && (
+            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
+              {maintenanceMessage}
+            </div>
+          )}
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-xs pt-1">
+            {/* Storage Quota Usage Meter */}
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="font-semibold text-slate-700">Pemakaian Kuota Storage</span>
+                <span className={`font-mono font-bold ${isStorageWarning ? 'text-amber-700' : 'text-slate-800'}`}>
+                  {storageUsagePct.toFixed(1)}% / 100%
+                </span>
+              </div>
+              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all ${
+                    isStorageWarning ? 'bg-amber-500' : 'bg-emerald-500'
+                  }`}
+                  style={{ width: `${Math.min(storageUsagePct, 100)}%` }}
+                ></div>
+              </div>
+              <div className="flex items-center justify-between text-[11px] text-slate-500">
+                <span>Kapasitas: 1 GB</span>
+                {isStorageWarning && (
+                  <span className="text-amber-700 font-semibold">Melebihi batas 70%</span>
+                )}
+              </div>
+            </div>
+
+            {/* Last Execution Info */}
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+              <span className="font-semibold text-slate-700 block">Status Retensi Terakhir</span>
+              <p className="text-slate-800">
+                Waktu:{' '}
+                <span className="font-medium">
+                  {maintenanceData?.retention_last_run?.last_run_at
+                    ? formatWib(maintenanceData.retention_last_run.last_run_at, 'full')
+                    : 'Belum pernah dijalankan'}
+                </span>
+              </p>
+              <div className="flex items-center gap-1.5 pt-0.5">
+                <span className="text-[11px] text-slate-500">Hasil:</span>
+                <span className={`inline-flex px-1.5 py-0.2 rounded text-[10px] font-bold ${
+                  maintenanceData?.retention_last_run?.status === 'SUCCESS'
+                    ? 'bg-emerald-100 text-emerald-800'
+                    : maintenanceData?.retention_last_run?.status === 'PARTIAL_FAILURE'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-slate-200 text-slate-600'
+                }`}>
+                  {maintenanceData?.retention_last_run?.status || 'STANDBY'}
+                </span>
+              </div>
+            </div>
+
+            {/* Routine Schedule & Auto Keep-Alive */}
+            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
+              <span className="font-semibold text-slate-700 block">Jadwal Rutin Vercel Cron</span>
+              <p className="text-slate-800">
+                Pukul <span className="font-bold text-slate-900">02:00 WIB</span> setiap hari.
+              </p>
+              <p className="text-[11px] text-slate-500">
+                Menjaga project Supabase Free-Tier tetap aktif (*keep-alive*) dan menghapus dokumen &le; 24 jam &amp; foto transaksi &gt; 180 hari.
+              </p>
+            </div>
+          </div>
+        </div>
 
         {/* Filter & Search Bar */}
         <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm space-y-4">
@@ -442,7 +615,7 @@ export default function AdminDashboardPage() {
               <table className="w-full text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Waktu Pinjam & Batas</th>
+                    <th className="py-3 px-4">Waktu Pinjam &amp; Batas</th>
                     <th className="py-3 px-4">Waktu Kembali</th>
                     <th className="py-3 px-4">Peminjam</th>
                     <th className="py-3 px-4">Kelas</th>
@@ -614,7 +787,7 @@ export default function AdminDashboardPage() {
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
               <div>
-                <p className="font-semibold">Ketentuan Privasi & Keamanan (NFR-05, NFR-07):</p>
+                <p className="font-semibold">Ketentuan Privasi &amp; Keamanan (NFR-05, NFR-07):</p>
                 <p className="mt-0.5">
                   Foto disimpan pada bucket privat dan hanya diakses melalui signed URL berumur 60 detik. Setiap pembukaan tercatat di audit log. Foto murni pembanding visual petugas tanpa algoritma pengenalan wajah otomatis.
                 </p>
@@ -764,7 +937,7 @@ export default function AdminDashboardPage() {
               </div>
 
               <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
-                Format file mencakup UTF-8 BOM agar nama dan tanda waktu WIB tampil rapi di Microsoft Excel.
+                Format file mencakup UTF-8 BOM dan perlindungan formula injection agar nama dan tanda waktu WIB tampil aman di Microsoft Excel.
               </div>
             </div>
 

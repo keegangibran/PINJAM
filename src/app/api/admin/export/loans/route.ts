@@ -8,7 +8,21 @@ function escapeCsvCell(val: unknown): string {
   if (val === null || val === undefined) {
     return '""';
   }
-  const str = String(val);
+  let str = String(val);
+
+  // Mitigasi CSV Formula Injection (CWE-1236):
+  // Jika teks dimulai dengan karakter pemicu formula (=, +, @, tab, CR) atau ekspresi formula minus
+  if (
+    str.startsWith('=') ||
+    str.startsWith('+') ||
+    str.startsWith('@') ||
+    str.startsWith('\t') ||
+    str.startsWith('\r') ||
+    (str.startsWith('-') && str.length > 1 && !/^-?\d+(\.\d+)?$/.test(str))
+  ) {
+    str = `'${str}`;
+  }
+
   if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
