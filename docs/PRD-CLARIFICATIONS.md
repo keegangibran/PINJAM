@@ -97,3 +97,35 @@ Pada tabel `loans`, ditambahkan kolom `issue_resolved_at timestamptz NULL`.
 - Tugas cron retensi foto hanya menghapus foto transaksi jika:
   `status = 'COMPLETED' AND returned_at < now() - interval '180 days' AND (return_condition = 'NORMAL' OR issue_resolved_at IS NOT NULL)`.
 
+
+
+---
+
+## 6. Alur Status Registrasi & Verifikasi Tatap Muka (GAP-06)
+
+### Latar Belakang
+PRD menetapkan alur verifikasi tatap muka (FR-01B, FR-01C, FT-00) di mana mahasiswa mendaftar daring, lalu hadir fisik ke loket TU membawa KTM atau KTP fisik. Status pendaftaran perlu memiliki transisi yang konsisten dan terprediksi:
+
+### Keputusan Desain
+1. **UNVERIFIED_EMAIL**: Status saat mahasiswa baru mengisi form pendaftaran di `/register`. Mahasiswa belum memverifikasi emailnya.
+2. **PENDING_DOCUMENT**: Status setelah konfirmasi email berhasil di `/auth/callback`. Mahasiswa siap hadir ke loket TU membawa identitas fisik.
+3. **PENDING_VERIFICATION**: Status saat petugas TU di meja loket telah mengambil foto live wajah dan foto dokumen identitas via kamera antarmuka `/admin/verifications`.
+4. **Keputusan Petugas**:
+   - **APPROVE**: Hanya dapat dipilih jika ketiga ceklist manual bernilai benar (`face_match = true`, `name_match = true`, `status_confirmed = true`). Status menjadi `ACTIVE`. Foto dokumen KTM/KTP dihapus seketika dari storage bucket privat (`NFR-08`). Jika ada klaim ketua awal (`INITIAL`), otomatis disetujui (`APPROVED`) dan mahasiswa dijadikan `leader_student_id` di kelasnya.
+   - **REJECT**: Mewajibkan catatan penolakan dari petugas. Status menjadi `REJECTED`. Foto dokumen dihapus seketika.
+   - **REQUEST_RESUBMISSION**: Mewajibkan catatan perbaikan dari petugas. Status menjadi `RESUBMISSION_REQUIRED`. Foto dokumen dihapus seketika.
+
+---
+
+## 7. Kesetaraan Dokumen KTM dan KTP Tanpa OCR / Biometrik
+
+### Latar Belakang
+PRD Bagian 7.1 & Aturan Workspace menegaskan bahwa mahasiswa yang belum memiliki KTM dapat menggunakan KTP fisik dengan perlakuan setara. Sistem dilarang melakukan OCR dan facial recognition otomatis.
+
+### Keputusan Desain
+1. Antarmuka petugas menyediakan pilihan jenis dokumen: `KTM` atau `KTP`.
+2. Petugas melakukan perbandingan visual manual berdampingan (*side-by-side*) antara:
+   - Tangkapan kamera wajah langsung di loket.
+   - Foto fisik pada KTM/KTP yang ditunjukkan mahasiswa.
+   - Data nama dan NIM yang diinput pada formulir.
+3. Seluruh proses tidak mengandalkan kecerdasan buatan atau pemindaian biometrik otomatis untuk menjamin privasi dan kepatuhan terhadap PRD.
