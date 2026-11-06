@@ -20,7 +20,7 @@ export type AuditAction =
 
 export interface AuditLogParams {
   action: AuditAction;
-  entityType: 'students' | 'classes' | 'projectors' | 'loans' | 'class_leader_claims' | 'storage' | 'app_settings';
+  entityType: 'students' | 'classes' | 'projectors' | 'loans' | 'class_leader_claims' | 'storage' | 'app_settings' | 'kiosk_sessions';
   entityId?: string | null;
   actorStaffId?: string | null;
   actorStudentId?: string | null;
