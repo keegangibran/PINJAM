@@ -16,7 +16,8 @@ export type AuditAction =
   | 'LOAN_RETURNED_WITH_ISSUE'
   | 'PROJECTOR_STATUS_CHANGED'
   | 'PROJECTOR_ASSET_MODIFIED'
-  | 'SETTINGS_UPDATED';
+  | 'SETTINGS_UPDATED'
+  | 'LOANS_EXPORTED';
 
 export interface AuditLogParams {
   action: AuditAction;
