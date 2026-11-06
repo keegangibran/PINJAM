@@ -55,3 +55,4 @@ describe('Image Compression & Processing Module (src/lib/image.ts)', () => {
     expect(blob.size).toBeGreaterThan(0);
   });
 });
+
