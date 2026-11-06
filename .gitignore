@@ -43,6 +43,9 @@ Thumbs.db
 *.swp
 *.swo
 
+# TypeScript build info
+*.tsbuildinfo
+
 # Temporary and local test outputs
 .vitest/
 test-results/
