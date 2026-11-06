@@ -207,3 +207,4 @@ describe('QR Token Module (src/lib/qr-token.ts)', () => {
     expect(invalidFormatResult.valid).toBe(false);
   });
 });
+
