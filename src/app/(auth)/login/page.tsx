@@ -48,7 +48,7 @@ function LoginForm() {
     <div className="w-full max-w-md rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
       <div className="text-center">
         <span className="inline-block rounded-full bg-blue-100 px-3 py-1 text-xs font-semibold text-blue-700">
-          SmartProjex
+          PINJAM
         </span>
         <h1 className="mt-3 text-2xl font-bold tracking-tight text-slate-900">
           Masuk ke Akun

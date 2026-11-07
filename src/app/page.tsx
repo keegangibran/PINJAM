@@ -9,7 +9,7 @@ export default function HomePage() {
             Fase 1 — Fondasi
           </span>
           <h1 className="mt-4 text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
-            SmartProjex
+            PINJAM
           </h1>
           <p className="mt-2 text-sm text-slate-600">
             Sistem Peminjaman Proyektor Pintar Berbasis Dual-Scan & Verifikasi Tatap Muka

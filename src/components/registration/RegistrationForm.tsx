@@ -239,7 +239,7 @@ export default function RegistrationForm() {
             disabled={submitting}
           />
           <span className="text-xs text-slate-600 leading-relaxed">
-            <strong>Pernyataan Privasi & Persetujuan Eksplisit:</strong> Saya memahami bahwa SmartProjex memerlukan pengambilan foto wajah referensi dan foto dokumen identitas (KTM atau KTP) di meja TU semata-mata untuk verifikasi identitas peminjaman proyektor secara tatap muka oleh petugas. Foto dokumen akan dihapus segera setelah diverifikasi dan tidak ada data NIK yang disimpan.
+            <strong>Pernyataan Privasi & Persetujuan Eksplisit:</strong> Saya memahami bahwa sistem PINJAM memerlukan pengambilan foto wajah referensi dan foto dokumen identitas (KTM atau KTP) di meja TU semata-mata untuk verifikasi identitas peminjaman proyektor secara tatap muka oleh petugas. Foto dokumen akan dihapus segera setelah diverifikasi dan tidak ada data NIK yang disimpan.
           </span>
         </label>
       </div>

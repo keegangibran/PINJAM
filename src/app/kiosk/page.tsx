@@ -383,7 +383,7 @@ export default function KioskPage() {
                 Standby Loket TU
               </span>
             </h1>
-            <p className="text-xs text-slate-400">SmartProjex • Peminjaman & Pengembalian Cepat</p>
+            <p className="text-xs text-slate-400">PINJAM • Peminjaman & Pengembalian Cepat</p>
           </div>
         </div>
 
@@ -1005,7 +1005,7 @@ export default function KioskPage() {
 
       {/* Bottom Footer Information */}
       <div className="max-w-6xl w-full mx-auto flex items-center justify-between text-[11px] text-slate-500 border-t border-slate-900 pt-3">
-        <span>Sistem Transaksi Proyektor SmartProjex • TU Fakultas</span>
+        <span>Sistem Transaksi Proyektor PINJAM • TU Fakultas</span>
         <span className="font-mono">WIB (Asia/Jakarta) • Server Time Authoritative</span>
       </div>
     </div>

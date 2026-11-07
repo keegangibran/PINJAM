@@ -817,7 +817,7 @@ export default function AdminProjectorsPage() {
             >
               <div className="border-b border-slate-200 pb-2 w-full">
                 <p className="text-[10px] tracking-widest uppercase font-bold text-slate-500">
-                  SMARTPROJEX ASSET TAG
+                  PINJAM ASSET TAG
                 </p>
                 <h4 className="text-xl font-black font-mono text-slate-900 mt-0.5">
                   {qrPrintProjector.code}
@@ -836,7 +836,7 @@ export default function AdminProjectorsPage() {
               <div className="w-full pt-1">
                 <p className="text-xs font-bold text-slate-800">{qrPrintProjector.name}</p>
                 <p className="text-[10px] text-slate-500 mt-0.5">
-                  Pindai di Kiosk SmartProjex saat pinjam / kembali
+                  Pindai di Kiosk PINJAM saat pinjam / kembali
                 </p>
               </div>
             </div>

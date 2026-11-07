@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import './globals.css';
 
 export const metadata: Metadata = {
-  title: 'SmartProjex — Sistem Peminjaman Proyektor Pintar',
+  title: 'PINJAM — Sistem Peminjaman Proyektor Pintar',
   description: 'Sistem Peminjaman Proyektor Kampus Berbasis Dual-Scan & Verifikasi Tatap Muka TU',
 };
 
