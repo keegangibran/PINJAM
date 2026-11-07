@@ -11,12 +11,14 @@ describe('Database SQL Migrations & Schema Validation', () => {
   const migration3Path = path.join(migrationsDir, '20261106000003_storage_setup.sql');
   const migration4Path = path.join(migrationsDir, '20261106000004_atomic_transactions.sql');
   const migration5Path = path.join(migrationsDir, '20261106000005_class_leader_transfer.sql');
+  const migration6Path = path.join(migrationsDir, '20261106000006_security_hardening.sql');
 
   const migration1Sql = fs.readFileSync(migration1Path, 'utf-8');
   const migration2Sql = fs.readFileSync(migration2Path, 'utf-8');
   const migration3Sql = fs.readFileSync(migration3Path, 'utf-8');
   const migration4Sql = fs.readFileSync(migration4Path, 'utf-8');
   const migration5Sql = fs.readFileSync(migration5Path, 'utf-8');
+  const migration6Sql = fs.readFileSync(migration6Path, 'utf-8');
   const seedSql = fs.readFileSync(seedFile, 'utf-8');
 
   it('E-1: Migration 1 mendefinisikan seluruh 10 tabel domain yang diwajibkan PRD', () => {
@@ -121,6 +123,25 @@ describe('Database SQL Migrations & Schema Validation', () => {
     expect(migration5Sql).toContain('LEADER_TRANSFERRED');
     expect(migration5Sql).toContain('QR_REVOKED');
     expect(migration5Sql).toContain('qr_token_version + 1');
+  });
+
+  it('E-10: Migration 6 memuat pencabutan izin publik, lock atomik retention, dan kebijakan anon_read_active_classes', () => {
+    expect(migration6Sql).toContain('REVOKE EXECUTE ON FUNCTION public.process_loan_transaction');
+    expect(migration6Sql).toContain('TO service_role');
+    expect(migration6Sql).toContain('CREATE POLICY "anon_read_active_classes" ON public.classes');
+    expect(migration6Sql).toContain('CREATE OR REPLACE FUNCTION public.acquire_retention_lock');
+    expect(migration6Sql).toContain('CREATE OR REPLACE FUNCTION public.release_retention_lock');
+  });
+
+  it('E-11: Seluruh 6 berkas migrasi tersusun berurutan dengan penamaan timestamp unik tanpa gap', () => {
+    const files = fs.readdirSync(migrationsDir).filter(f => f.endsWith('.sql')).sort();
+    expect(files).toHaveLength(6);
+    expect(files[0]).toBe('20261106000001_initial_schema.sql');
+    expect(files[1]).toBe('20261106000002_rls_policies.sql');
+    expect(files[2]).toBe('20261106000003_storage_setup.sql');
+    expect(files[3]).toBe('20261106000004_atomic_transactions.sql');
+    expect(files[4]).toBe('20261106000005_class_leader_transfer.sql');
+    expect(files[5]).toBe('20261106000006_security_hardening.sql');
   });
 });
 
