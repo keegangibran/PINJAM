@@ -144,3 +144,4 @@ GRANT EXECUTE ON FUNCTION public.acquire_retention_lock(integer) TO service_role
 
 REVOKE EXECUTE ON FUNCTION public.release_retention_lock(jsonb) FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION public.release_retention_lock(jsonb) TO service_role;
+

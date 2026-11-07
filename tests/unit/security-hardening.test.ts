@@ -92,3 +92,4 @@ describe('GET /api/classes Unauthenticated Access & Admin Client Verification', 
     expect(mockEq).toHaveBeenCalledWith('is_active', true);
   });
 });
+
