@@ -48,17 +48,26 @@ export async function executeRetentionAndMaintenance(options?: {
   // --------------------------------------------------------------------------
   // 0. Concurrency Protection (Mencegah eksekusi ganda simultan)
   // --------------------------------------------------------------------------
-  const { data: lastRunSetting } = await adminClient
-    .from('app_settings')
-    .select('value')
-    .eq('key', 'retention_last_run')
-    .maybeSingle();
+  if (!options?.force) {
+    let lockHandledViaRpc = false;
+    let lockAcquired = false;
 
-  const lastRunData = (lastRunSetting?.value as Record<string, unknown>) || {};
-  if (!options?.force && lastRunData.status === 'RUNNING' && lastRunData.last_run_at) {
-    const lastRunTime = new Date(String(lastRunData.last_run_at)).getTime();
-    const fiveMinutes = 5 * 60 * 1000;
-    if (Date.now() - lastRunTime < fiveMinutes) {
+    // 0A. Upayakan perolehan atomic lock di level database via RPC jika tersedia
+    if (typeof adminClient.rpc === 'function') {
+      try {
+        const { data, error: lockRpcError } = await adminClient.rpc('acquire_retention_lock', {
+          p_lock_ttl_seconds: 300,
+        });
+        if (!lockRpcError) {
+          lockHandledViaRpc = true;
+          lockAcquired = data === true;
+        }
+      } catch {
+        // Abaikan dan gunakan fallback app_settings di bawah
+      }
+    }
+
+    if (lockHandledViaRpc && !lockAcquired) {
       return {
         success: false,
         code: 'CRON_ALREADY_RUNNING',
@@ -79,19 +88,55 @@ export async function executeRetentionAndMaintenance(options?: {
         failures: ['Tugas pembersihan retensi sedang berjalan di proses lain.'],
       };
     }
-  }
 
-  // Tandai status RUNNING
-  await adminClient.from('app_settings').upsert({
-    key: 'retention_last_run',
-    value: {
-      ...lastRunData,
-      status: 'RUNNING',
-      last_run_at: startTime,
-    },
-    description: 'Status proses retensi pemeliharaan sistem.',
-    updated_at: startTime,
-  });
+    // 0B. Fallback jika RPC tidak didefinisikan (misal di mock unit test)
+    if (!lockHandledViaRpc) {
+      const { data: lastRunSetting } = await adminClient
+        .from('app_settings')
+        .select('value')
+        .eq('key', 'retention_last_run')
+        .maybeSingle();
+
+      const lastRunData = (lastRunSetting?.value as Record<string, unknown>) || {};
+      if (lastRunData.status === 'RUNNING' && lastRunData.last_run_at) {
+        const lastRunTime = new Date(String(lastRunData.last_run_at)).getTime();
+        const fiveMinutes = 5 * 60 * 1000;
+        if (Date.now() - lastRunTime < fiveMinutes) {
+          return {
+            success: false,
+            code: 'CRON_ALREADY_RUNNING',
+            timestamp: startTime,
+            retention_results: {
+              deleted_document_photos: 0,
+              deleted_face_photos: 0,
+              deleted_loan_photos: 0,
+              expired_leaders_revoked: 0,
+            },
+            storage_monitoring: {
+              usage_bytes: 0,
+              usage_pct: 0,
+              warning_active: false,
+              max_capacity_bytes: 1073741824,
+            },
+            keep_alive: true,
+            failures: ['Tugas pembersihan retensi sedang berjalan di proses lain.'],
+          };
+        }
+      }
+
+      // Tandai status RUNNING
+      await adminClient.from('app_settings').upsert({
+        key: 'retention_last_run',
+        value: {
+          ...lastRunData,
+          status: 'RUNNING',
+          last_run_at: startTime,
+        },
+        description: 'Status proses retensi pemeliharaan sistem.',
+        updated_at: startTime,
+      });
+    }
+  }
 
   try {
     // --------------------------------------------------------------------------

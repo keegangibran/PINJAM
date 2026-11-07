@@ -1,13 +1,15 @@
-import { createServerSupabaseClient } from '@/lib/supabase/server';
+import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 
 /**
  * Endpoint publik/terautentikasi untuk mendapatkan daftar kelas aktif
  * Digunakan pada form registrasi mahasiswa dan pencarian kelas baku.
+ * Menggunakan createAdminClient() agar calon mahasiswa (belum login) dapat
+ * memuat pilihan kelas aktif secara aman pada antarmuka registrasi publik.
  */
 export async function GET() {
   try {
-    const supabase = await createServerSupabaseClient();
+    const supabase = createAdminClient();
 
     const { data: classes, error } = await supabase
       .from('classes')
