@@ -39,7 +39,7 @@ export async function GET() {
         leader_since,
         is_active,
         created_at,
-        leader:students (
+        leader:students!fk_classes_leader_student (
           id,
           name,
           nim,
