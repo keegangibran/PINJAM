@@ -70,8 +70,31 @@ export async function POST(request: Request) {
       .single();
 
     if (student) {
+      let currentStatus = student.registration_status;
+
+      // Sinkronisasi status: Jika email Auth sudah dikonfirmasi tetapi registration_status di tabel students masih UNVERIFIED_EMAIL
+      if (currentStatus === 'UNVERIFIED_EMAIL' && Boolean(authData.user.email_confirmed_at)) {
+        const { error: updateError } = await adminClient
+          .from('students')
+          .update({
+            registration_status: 'PENDING_DOCUMENT',
+            updated_at: new Date().toISOString(),
+          })
+          .eq('id', student.id);
+
+        if (updateError) {
+          console.error('Gagal memperbarui status mahasiswa ke PENDING_DOCUMENT pada login:', updateError);
+          return NextResponse.json(
+            { error: { code: 'STATUS_UPDATE_FAILED', message: 'Gagal memperbarui status verifikasi mahasiswa.' } },
+            { status: 500 }
+          );
+        }
+
+        currentStatus = 'PENDING_DOCUMENT';
+      }
+
       let redirectTo = '/register';
-      if (student.registration_status === 'ACTIVE') {
+      if (currentStatus === 'ACTIVE') {
         redirectTo = '/my-qr';
       }
 
@@ -79,7 +102,7 @@ export async function POST(request: Request) {
         success: true,
         role: 'STUDENT',
         name: student.name,
-        status: student.registration_status,
+        status: currentStatus,
         redirectTo,
       });
     }

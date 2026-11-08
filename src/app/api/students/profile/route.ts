@@ -13,6 +13,44 @@ const studentRegistrationSchema = z.object({
   consent: z.boolean().refine((val) => val === true, 'Persetujuan pengambilan foto wajib dicentang'),
 });
 
+/**
+ * Menghasilkan URL callback verifikasi email yang aman.
+ * Mencegah open-redirect / SSRF dengan memvalidasi origin terhadap konfigurasi tepercaya.
+ */
+function getSafeEmailRedirectTo(request: Request): string {
+  // 1. Prioritaskan URL aplikasi yang didefinisikan secara eksplisit di environment
+  const configuredAppUrl = process.env.NEXT_PUBLIC_APP_URL || process.env.NEXT_PUBLIC_SITE_URL;
+  if (configuredAppUrl) {
+    try {
+      const parsed = new URL(configuredAppUrl);
+      return `${parsed.origin}/auth/callback`;
+    } catch {
+      // Abaikan konfigurasi yang tidak valid
+    }
+  }
+
+  // 2. Evaluasi URL request tanpa mempercayai header origin eksternal secara sembarangan
+  try {
+    const reqUrl = new URL(request.url);
+    const hostname = reqUrl.hostname.toLowerCase();
+
+    // Hanya izinkan domain tepercaya (localhost, 127.0.0.1, Vercel deployments)
+    const isAllowedHost =
+      hostname === 'localhost' ||
+      hostname === '127.0.0.1' ||
+      hostname.endsWith('.vercel.app');
+
+    if (isAllowedHost) {
+      return `${reqUrl.origin}/auth/callback`;
+    }
+  } catch {
+    // Fallback bila parsing URL gagal
+  }
+
+  // 3. Fallback default yang aman
+  return 'http://localhost:3000/auth/callback';
+}
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -59,10 +97,12 @@ export async function POST(request: Request) {
 
     // 3. Daftarkan akun ke Supabase Auth
     const supabase = await createServerSupabaseClient();
+    const emailRedirectTo = getSafeEmailRedirectTo(request);
     const { data: authData, error: authError } = await supabase.auth.signUp({
       email,
       password,
       options: {
+        emailRedirectTo,
         data: {
           name,
           nim,

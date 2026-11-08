@@ -233,6 +233,131 @@ describe('Student Registration API Unit Tests (POST /api/students/profile)', () 
     expect(data.data.student_id).toBe(studentDbId);
     expect(data.data.claim_type).toBe('INITIAL');
     expect(data.data.status).toBe('UNVERIFIED_EMAIL');
+
+    // Verifikasi bahwa supabase.auth.signUp dipanggil dengan emailRedirectTo menuju /auth/callback
+    expect(mockSignUp).toHaveBeenCalledWith({
+      email: validPayload.email,
+      password: validPayload.password,
+      options: {
+        emailRedirectTo: 'http://localhost/auth/callback',
+        data: {
+          name: validPayload.name,
+          nim: validPayload.nim,
+          role: 'STUDENT',
+        },
+      },
+    });
+  });
+
+  it('safely falls back emailRedirectTo when request origin/host is untrusted', async () => {
+    // 1. Mock classes query: active class found
+    mockAdminFrom.mockReturnValueOnce({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: validPayload.class_id,
+          study_program: 'Ilmu Komputer',
+          cohort_year: 2025,
+          section: 'B',
+          academic_term: '2026/2027-GANJIL',
+          is_active: true,
+          leader_student_id: null,
+        },
+        error: null,
+      }),
+    });
+
+    // 2. Mock students NIM check: no active student with this NIM
+    mockAdminFrom.mockReturnValueOnce({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: null,
+        error: null,
+      }),
+    });
+
+    // 3. Mock supabase.auth.signUp
+    mockSignUp.mockResolvedValueOnce({
+      data: {
+        user: {
+          id: 'untrusted-host-user-id',
+          email: validPayload.email,
+          identities: [{ id: 'identity-1' }],
+          email_confirmed_at: null,
+        },
+        session: null,
+      },
+      error: null,
+    });
+
+    // 4. Mock students insert
+    mockAdminFrom.mockReturnValueOnce({
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'std-untrusted-id',
+          auth_user_id: 'untrusted-host-user-id',
+          nim: validPayload.nim,
+          name: validPayload.name,
+          registration_status: 'UNVERIFIED_EMAIL',
+        },
+        error: null,
+      }),
+    });
+
+    // 5. Mock class_leader_claims existing initial claim check
+    mockAdminFrom.mockReturnValueOnce({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      in: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({
+        data: null,
+        error: null,
+      }),
+    });
+
+    // 6. Mock class_leader_claims insert
+    mockAdminFrom.mockReturnValueOnce({
+      insert: vi.fn().mockReturnThis(),
+      select: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'claim-untrusted',
+          class_id: validPayload.class_id,
+          student_id: 'std-untrusted-id',
+          claim_type: 'INITIAL',
+          status: 'PENDING',
+        },
+        error: null,
+      }),
+    });
+
+    // Panggilan dengan host yang tidak tepercaya (misal penyerang mengirimkan header host/request ke malicious.com)
+    const req = new Request('http://malicious-attacker.com/api/students/profile', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(validPayload),
+    });
+
+    const res = await registerStudent(req);
+    expect(res.status).toBe(201);
+
+    // Host tidak tepercaya tidak boleh dipakai; harus fallback ke default aman (http://localhost:3000/auth/callback)
+    expect(mockSignUp).toHaveBeenCalledWith({
+      email: validPayload.email,
+      password: validPayload.password,
+      options: {
+        emailRedirectTo: 'http://localhost:3000/auth/callback',
+        data: {
+          name: validPayload.name,
+          nim: validPayload.nim,
+          role: 'STUDENT',
+        },
+      },
+    });
   });
 });
 
