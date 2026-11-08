@@ -78,6 +78,19 @@ export async function POST(request: Request) {
       );
     }
 
+    // Deteksi akun email sudah terdaftar di Supabase Auth (identities kosong menandakan fake user anti-enumeration)
+    if (!authData.user.identities || authData.user.identities.length === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'EMAIL_ALREADY_REGISTERED',
+            message: 'Alamat email ini sudah terdaftar pada sistem PINJAM. Silakan gunakan email mahasiswa lain atau masuk ke akun Anda.',
+          },
+        },
+        { status: 409 }
+      );
+    }
+
     // 4. Tentukan status awal: jika email sudah terkonfirmasi otomatis (mis. dev environment), PENDING_DOCUMENT, jika belum, UNVERIFIED_EMAIL
     const isEmailConfirmed = Boolean(authData.user.email_confirmed_at);
     const initialStatus = isEmailConfirmed ? 'PENDING_DOCUMENT' : 'UNVERIFIED_EMAIL';
