@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 import { GET as getLoans } from '@/app/api/admin/loans/route';
 import * as guards from '@/lib/auth/guards';
@@ -26,6 +26,10 @@ describe('Admin Loans Ledger API (GET /api/admin/loans)', () => {
     });
   });
 
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it('rejects unauthenticated or non-staff caller', async () => {
     vi.spyOn(guards, 'requireStaff').mockRejectedValueOnce(
       new guards.AuthError('Akses ditolak: Operasi ini memerlukan hak akses Petugas TU atau Administrator.', 403, 'FORBIDDEN')
@@ -40,6 +44,9 @@ describe('Admin Loans Ledger API (GET /api/admin/loans)', () => {
   });
 
   it('computes real-time inventory and overdue summary counts and returns loans list', async () => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-11-06T12:00:00Z'));
+
     // Mock the 5 count queries
     mockAdminFrom
       .mockReturnValueOnce({
