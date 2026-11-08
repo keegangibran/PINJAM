@@ -78,6 +78,32 @@ describe('Verification Decision API Unit Tests', () => {
     const data = await res.json();
     expect(res.status).toBe(400);
     expect(data.error.code).toBe('NOTES_REQUIRED');
+    expect(mockAdminFrom).not.toHaveBeenCalled();
+  });
+
+  it('rejects REQUEST_RESUBMISSION without notes (FR-01C)', async () => {
+    const req = new Request('http://localhost/api/admin/verifications/stu-123', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'REQUEST_RESUBMISSION',
+        checks: {
+          face_match: false,
+          name_match: true,
+          status_confirmed: false,
+        },
+        notes: '   ', // whitespace only!
+      }),
+    });
+
+    const res = await handleVerification(req, {
+      params: Promise.resolve({ studentId: 'stu-123' }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error.code).toBe('NOTES_REQUIRED');
+    expect(mockAdminFrom).not.toHaveBeenCalled();
   });
 
   it('rejects APPROVE if another ACTIVE account with the same NIM exists (Partial Unique Index)', async () => {
