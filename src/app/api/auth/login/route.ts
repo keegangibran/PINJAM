@@ -93,10 +93,9 @@ export async function POST(request: Request) {
         currentStatus = 'PENDING_DOCUMENT';
       }
 
-      let redirectTo = '/register';
-      if (currentStatus === 'ACTIVE') {
-        redirectTo = '/my-qr';
-      }
+      // Seluruh mahasiswa yang profilnya sudah terdaftar diarahkan ke /my-qr.
+      // Halaman /my-qr secara otomatis menangani tampilan sesuai status (misal PENDING_DOCUMENT / ACTIVE).
+      const redirectTo = '/my-qr';
 
       return NextResponse.json({
         success: true,
