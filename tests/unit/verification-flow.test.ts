@@ -266,5 +266,82 @@ describe('Verification Decision API Unit Tests', () => {
       })
     );
   });
+
+  it('requests resubmission with valid notes, updates status to RESUBMISSION_REQUIRED, deletes document photo (NFR-08), and audits', async () => {
+    // 1. Fetch current student
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'stu-resubmit',
+          nim: '220101003',
+          name: 'Mahasiswa Foto Buram',
+          current_class_id: 'cls-1',
+          verification_document_path: 'documents/stu-resubmit_ktm.jpg',
+          registration_status: 'PENDING_DOCUMENT',
+        },
+        error: null,
+      }),
+    }));
+
+    // 2. Update student table (status -> RESUBMISSION_REQUIRED, verification_notes, verification_document_path -> null)
+    const updateStudentMock = vi.fn().mockReturnThis();
+    mockAdminFrom.mockImplementationOnce(() => ({
+      update: updateStudentMock,
+      eq: vi.fn().mockResolvedValueOnce({ data: null, error: null }),
+    }));
+
+    const validNotes = 'Foto KTM buram dan tidak terbaca, silakan ambil ulang foto fisik KTM di meja TU.';
+    const req = new Request('http://localhost/api/admin/verifications/stu-resubmit', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'REQUEST_RESUBMISSION',
+        checks: {
+          face_match: false,
+          name_match: true,
+          status_confirmed: false,
+        },
+        notes: validNotes,
+      }),
+    });
+
+    const res = await handleVerification(req, {
+      params: Promise.resolve({ studentId: 'stu-resubmit' }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.success).toBe(true);
+    expect(data.data.new_status).toBe('RESUBMISSION_REQUIRED');
+
+    // 3. Verify mock database students receives update with status and notes
+    expect(updateStudentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registration_status: 'RESUBMISSION_REQUIRED',
+        verification_notes: validNotes,
+        verification_document_path: null,
+      })
+    );
+
+    // 4. Verify document photo deleted immediately from storage (NFR-08 & FR-01C)
+    expect(mockStorageRemove).toHaveBeenCalledWith(['documents/stu-resubmit_ktm.jpg']);
+
+    // 5. Verify audit log records REQUEST_RESUBMISSION decision
+    expect(audit.recordAuditLog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        action: 'VERIFICATION_DECIDED',
+        entityType: 'students',
+        entityId: 'stu-resubmit',
+        metadata: expect.objectContaining({
+          decision: 'REQUEST_RESUBMISSION',
+          notes: validNotes,
+          document_photo_deleted: true,
+        }),
+      })
+    );
+  });
 });
 
