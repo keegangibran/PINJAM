@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback, useRef } from 'react';
+import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
 import Link from 'next/link';
 
@@ -52,6 +53,30 @@ export default function MyQrPassPage() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSuccess, setTransferSuccess] = useState<boolean>(false);
+
+  // Logout state
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLogoutError(data.error?.message || 'Gagal memproses keluar akun.');
+        setLoggingOut(false);
+        return;
+      }
+      router.push('/login');
+      router.refresh();
+    } catch {
+      setLogoutError('Terjadi gangguan jaringan saat memproses keluar akun.');
+      setLoggingOut(false);
+    }
+  };
 
   // Monitor network status
   useEffect(() => {
@@ -236,13 +261,42 @@ export default function MyQrPassPage() {
             </span>
             <span className="text-sm font-bold text-slate-900 tracking-tight">PINJAM Pass</span>
           </div>
-          <Link
-            href="/"
-            className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors"
-          >
-            Beranda
-          </Link>
+          <div className="flex items-center gap-2">
+            <Link
+              href="/"
+              className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors"
+            >
+              Beranda
+            </Link>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="text-xs text-red-600 hover:text-red-700 font-medium px-2.5 py-1 rounded-lg hover:bg-red-50 transition-colors flex items-center gap-1 disabled:opacity-50"
+            >
+              {loggingOut ? (
+                <>
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
+                  Keluar...
+                </>
+              ) : (
+                'Keluar'
+              )}
+            </button>
+          </div>
         </div>
+
+        {logoutError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 flex items-center justify-between">
+            <span>{logoutError}</span>
+            <button
+              onClick={() => setLogoutError(null)}
+              className="text-red-500 hover:text-red-700 font-bold ml-2 text-sm leading-none"
+              aria-label="Tutup pesan error"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Offline Warning Banner */}
         {!isOnline && (

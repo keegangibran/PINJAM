@@ -2,6 +2,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
 
@@ -121,6 +122,30 @@ export default function AdminDashboardPage() {
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
+
+  // Logout state
+  const router = useRouter();
+  const [loggingOut, setLoggingOut] = useState(false);
+  const [logoutError, setLogoutError] = useState<string | null>(null);
+
+  const handleLogout = async () => {
+    setLoggingOut(true);
+    setLogoutError(null);
+    try {
+      const res = await fetch('/api/auth/logout', { method: 'POST' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        setLogoutError(data.error?.message || 'Gagal memproses keluar akun.');
+        setLoggingOut(false);
+        return;
+      }
+      router.push('/login');
+      router.refresh();
+    } catch {
+      setLogoutError('Terjadi gangguan jaringan saat memproses keluar akun.');
+      setLoggingOut(false);
+    }
+  };
 
   const fetchLoans = useCallback(async () => {
     setLoading(true);
@@ -305,8 +330,40 @@ export default function AdminDashboardPage() {
               </svg>
               Ekspor CSV
             </button>
+            <button
+              onClick={handleLogout}
+              disabled={loggingOut}
+              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+            >
+              {loggingOut ? (
+                <>
+                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
+                  Keluar...
+                </>
+              ) : (
+                <>
+                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                  </svg>
+                  Keluar
+                </>
+              )}
+            </button>
           </div>
         </div>
+
+        {logoutError && (
+          <div className="rounded-xl border border-red-200 bg-red-50 p-3 text-xs text-red-700 flex items-center justify-between">
+            <span>{logoutError}</span>
+            <button
+              onClick={() => setLogoutError(null)}
+              className="text-red-500 hover:text-red-700 font-bold ml-2 text-sm leading-none"
+              aria-label="Tutup pesan error"
+            >
+              ✕
+            </button>
+          </div>
+        )}
 
         {/* Real-time Summary Metric Cards (FR-12) */}
         <div className="grid grid-cols-2 md:grid-cols-5 gap-3 md:gap-4">
