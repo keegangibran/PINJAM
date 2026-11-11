@@ -234,10 +234,11 @@ export default function AdminDashboardPage() {
     error: string | null;
   }>({ faceUrl: null, borrowUrl: null, returnUrl: null, loading: false, error: null });
 
-  // Export CSV modal state
+  // Export modal state
   const [isExportModalOpen, setIsExportModalOpen] = useState(false);
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
+  const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv'>('xlsx');
 
   // Logout state
   const router = useRouter();
@@ -364,10 +365,11 @@ export default function AdminDashboardPage() {
     setPhotoUrls({ faceUrl: null, borrowUrl: null, returnUrl: null, loading: false, error: null });
   };
 
-  const handleExportSubmit = () => {
+  const handleExportSubmit = (format: 'xlsx' | 'csv' = exportFormat) => {
     const params = new URLSearchParams();
     if (exportFrom) params.set('from', exportFrom);
     if (exportTo) params.set('to', exportTo);
+    params.set('format', format);
     window.location.href = `/api/admin/export/loans?${params.toString()}`;
     setIsExportModalOpen(false);
   };
@@ -444,7 +446,7 @@ export default function AdminDashboardPage() {
               <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
               </svg>
-              Ekspor CSV
+              Ekspor Data
             </button>
             <button
               onClick={handleLogout}
@@ -1063,12 +1065,12 @@ export default function AdminDashboardPage() {
         </div>
       )}
 
-      {/* Export CSV Modal (FR-10, NFR-10, FT-03) */}
+      {/* Export Modal (FR-10, NFR-10, FT-03) */}
       {isExportModalOpen && (
         <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <h3 className="text-lg font-bold text-slate-900">Ekspor Buku Besar ke CSV</h3>
+              <h3 className="text-lg font-bold text-slate-900">Ekspor Buku Besar Transaksi</h3>
               <button
                 onClick={() => setIsExportModalOpen(false)}
                 className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
@@ -1080,10 +1082,57 @@ export default function AdminDashboardPage() {
             </div>
 
             <p className="text-xs text-slate-500">
-              Sesuai <span className="font-semibold text-slate-700">NFR-10</span>, ekspor CSV dilakukan minimal mingguan karena basis data free-tier tidak menyediakan cadangan otomatis.
+              Sesuai <span className="font-semibold text-slate-700">NFR-10</span>, ekspor buku besar transaksi dilakukan secara berkala untuk pelaporan dan pencadangan data mandiri.
             </p>
 
-            <div className="space-y-3 pt-2">
+            <div className="space-y-3.5 pt-1">
+              <div>
+                <label className="block text-xs font-semibold text-slate-700 mb-1.5">
+                  Format Berkas:
+                </label>
+                <div className="grid grid-cols-2 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('xlsx')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition ${
+                      exportFormat === 'xlsx'
+                        ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">Excel (.xlsx)</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-emerald-100 text-emerald-800">
+                        Rekomendasi
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 leading-tight">
+                      Header tebal, kolom terformat rapi &amp; siap cetak.
+                    </span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setExportFormat('csv')}
+                    className={`p-2.5 rounded-xl border text-left flex flex-col gap-1 transition ${
+                      exportFormat === 'csv'
+                        ? 'border-emerald-500 bg-emerald-50/70 ring-2 ring-emerald-500/20'
+                        : 'border-slate-200 hover:border-slate-300 bg-white'
+                    }`}
+                  >
+                    <div className="flex items-center justify-between">
+                      <span className="text-xs font-bold text-slate-800">CSV (.csv)</span>
+                      <span className="text-[10px] px-1.5 py-0.5 rounded font-semibold bg-slate-100 text-slate-600">
+                        Universal
+                      </span>
+                    </div>
+                    <span className="text-[10px] text-slate-500 leading-tight">
+                      Standar RFC 4180 dengan UTF-8 BOM untuk Excel.
+                    </span>
+                  </button>
+                </div>
+              </div>
+
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Dari Tanggal Peminjaman (Opsional):
@@ -1092,7 +1141,7 @@ export default function AdminDashboardPage() {
                   type="date"
                   value={exportFrom}
                   onChange={(e) => setExportFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
@@ -1104,12 +1153,20 @@ export default function AdminDashboardPage() {
                   type="date"
                   value={exportTo}
                   onChange={(e) => setExportTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-lg text-xs bg-white text-slate-800 focus:outline-none focus:ring-2 focus:ring-emerald-500/20"
                 />
               </div>
 
-              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
-                Format file mencakup UTF-8 BOM dan perlindungan formula injection agar nama dan tanda waktu WIB tampil aman di Microsoft Excel.
+              <div className="p-3 bg-emerald-50/70 border border-emerald-200/80 rounded-xl text-[11px] text-emerald-900 flex items-start gap-2">
+                <svg className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <div>
+                  <p className="font-semibold">Cakupan Data Lengkap:</p>
+                  <p className="mt-0.5 text-emerald-800">
+                    Mengekspor seluruh transaksi (selesai, sedang aktif, terlambat, dan ada kendala) dengan waktu WIB serta penanganan karakter khusus.
+                  </p>
+                </div>
               </div>
             </div>
 
@@ -1121,13 +1178,13 @@ export default function AdminDashboardPage() {
                 Batal
               </button>
               <button
-                onClick={handleExportSubmit}
+                onClick={() => handleExportSubmit(exportFormat)}
                 className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-medium transition flex items-center gap-1.5 shadow-sm"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                 </svg>
-                Unduh Berkas CSV
+                {exportFormat === 'xlsx' ? 'Unduh Berkas Excel (.xlsx)' : 'Unduh Berkas CSV (.csv)'}
               </button>
             </div>
           </div>
