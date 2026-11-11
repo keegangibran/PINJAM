@@ -287,7 +287,7 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen p-6 md:p-8 bg-slate-50 text-slate-900">
-      <div className="max-w-7xl mx-auto space-y-6">
+      <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
         {/* Navigation & Title Header */}
         <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 gap-4">
           <div>
@@ -669,18 +669,18 @@ export default function AdminDashboardPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1100px] text-left border-collapse text-xs">
+              <table className="w-full min-w-[980px] text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4 min-w-[160px]">Waktu Pinjam &amp; Batas</th>
-                    <th className="py-3 px-4 min-w-[140px]">Waktu Kembali</th>
-                    <th className="py-3 px-4 min-w-[150px]">Peminjam</th>
-                    <th className="py-3 px-4 min-w-[140px]">Kelas</th>
-                    <th className="py-3 px-4 min-w-[130px]">Proyektor</th>
-                    <th className="py-3 px-4 min-w-[110px]">Dokumentasi</th>
-                    <th className="py-3 px-4 min-w-[130px]">Pengembali</th>
-                    <th className="py-3 px-4 min-w-[130px]">Petugas</th>
-                    <th className="py-3 pl-4 pr-6 sm:pr-8 text-center min-w-[140px]">Status</th>
+                    <th className="py-3 pl-4 pr-3 w-[155px]">Waktu Pinjam &amp; Batas</th>
+                    <th className="py-3 px-3 w-[135px]">Waktu Kembali</th>
+                    <th className="py-3 px-3 w-[150px]">Peminjam</th>
+                    <th className="py-3 px-3 w-[140px]">Kelas</th>
+                    <th className="py-3 px-3 w-[125px]">Proyektor</th>
+                    <th className="py-3 px-3 w-[105px] text-center">Dokumentasi</th>
+                    <th className="py-3 px-3 w-[130px]">Pengembali</th>
+                    <th className="py-3 px-3 w-[135px]">Petugas</th>
+                    <th className="py-3 pl-3 pr-6 text-center w-[125px]">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
@@ -688,7 +688,7 @@ export default function AdminDashboardPage() {
                     return (
                       <tr key={loan.id} className="hover:bg-slate-50/80 transition">
                         {/* Waktu Pinjam & Due At */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 pl-4 pr-3 whitespace-nowrap">
                           <p className="font-medium text-slate-900">{formatWib(loan.borrowed_at, 'short')}</p>
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[11px] text-slate-500">
@@ -703,7 +703,7 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Waktu Kembali */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-3 whitespace-nowrap">
                           {loan.returned_at ? (
                             <p className="text-slate-700 font-medium">{formatWib(loan.returned_at, 'short')}</p>
                           ) : (
@@ -712,17 +712,17 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Peminjam (Ketua Kelas) */}
-                        <td className="py-3 px-4">
-                          <p className="font-semibold text-slate-900">{loan.student?.name || '-'}</p>
-                          <p className="text-slate-500 text-[11px] font-mono">NIM {loan.student?.nim || '-'}</p>
+                        <td className="py-3 px-3">
+                          <p className="font-semibold text-slate-900 leading-tight">{loan.student?.name || '-'}</p>
+                          <p className="text-slate-500 text-[11px] font-mono mt-0.5">NIM {loan.student?.nim || '-'}</p>
                         </td>
 
                         {/* Kelas */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-3">
                           {loan.class ? (
                             <div>
-                              <p className="font-medium text-slate-800">{loan.class.study_program}</p>
-                              <p className="text-slate-500 text-[11px]">
+                              <p className="font-medium text-slate-800 leading-tight">{loan.class.study_program}</p>
+                              <p className="text-slate-500 text-[11px] mt-0.5">
                                 {loan.class.cohort_year} - Rombel {loan.class.section}
                               </p>
                             </div>
@@ -732,19 +732,19 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Proyektor */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-3">
                           <div className="flex items-center gap-1.5">
-                            <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-bold text-slate-800 border border-slate-200">
+                            <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-bold text-slate-800 border border-slate-200 whitespace-nowrap">
                               {loan.projector?.code || '-'}
                             </span>
                           </div>
-                          <p className="text-slate-500 text-[11px] mt-0.5 truncate max-w-[120px]">
+                          <p className="text-slate-500 text-[11px] mt-0.5 truncate max-w-[120px]" title={loan.projector?.name || ''}>
                             {loan.projector?.name || '-'}
                           </p>
                         </td>
 
                         {/* Dokumentasi Foto */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-3 whitespace-nowrap text-center">
                           <button
                             onClick={() => openPhotoModal(loan)}
                             className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium transition"
@@ -757,14 +757,16 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Pengembali */}
-                        <td className="py-3 px-4 whitespace-nowrap">
+                        <td className="py-3 px-3">
                           {loan.returned_by_type ? (
                             <div>
                               <span className="text-slate-700 font-medium">
                                 {loan.returned_by_type === 'BORROWER' ? 'Peminjam Sendiri' : 'Perwakilan'}
                               </span>
                               {loan.returned_by_name && (
-                                <p className="text-[11px] text-slate-500">Nama: {loan.returned_by_name}</p>
+                                <p className="text-[11px] text-slate-500 truncate max-w-[120px]" title={loan.returned_by_name}>
+                                  Nama: {loan.returned_by_name}
+                                </p>
                               )}
                             </div>
                           ) : (
@@ -773,19 +775,19 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Petugas */}
-                        <td className="py-3 px-4 whitespace-nowrap text-[11px]">
-                          <p className="text-slate-700">
+                        <td className="py-3 px-3 text-[11px]">
+                          <p className="text-slate-700 truncate" title={loan.borrow_staff?.name || ''}>
                             <span className="text-slate-400">Pinjam:</span> {loan.borrow_staff?.name || '-'}
                           </p>
                           {loan.return_staff && (
-                            <p className="text-slate-700 mt-0.5">
+                            <p className="text-slate-700 mt-0.5 truncate" title={loan.return_staff.name}>
                               <span className="text-slate-400">Kembali:</span> {loan.return_staff.name}
                             </p>
                           )}
                         </td>
 
                         {/* Status */}
-                        <td className="py-3 pl-4 pr-6 sm:pr-8 whitespace-nowrap text-center">
+                        <td className="py-3 pl-3 pr-6 whitespace-nowrap text-center">
                           {loan.status === 'ACTIVE' ? (
                             <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                               Dipinjam
@@ -796,7 +798,7 @@ export default function AdminDashboardPage() {
                                 Ada Kendala
                               </span>
                               {loan.damage_notes && (
-                                <p className="text-[10px] text-amber-700 mt-0.5 max-w-[120px] truncate" title={loan.damage_notes}>
+                                <p className="text-[10px] text-amber-700 mt-0.5 max-w-[110px] truncate" title={loan.damage_notes}>
                                   {loan.damage_notes}
                                 </p>
                               )}
