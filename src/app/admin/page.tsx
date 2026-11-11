@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
@@ -83,6 +83,122 @@ interface MaintenanceStatusData {
     current_term?: string;
     term_ends_at?: string;
   } | null;
+}
+
+function DamageNotesTooltip({ notes }: { notes: string }) {
+  const [isVisible, setIsVisible] = useState(false);
+  const [position, setPosition] = useState<{
+    top: number;
+    left: number;
+    placement: 'top' | 'bottom';
+  }>({ top: 0, left: 0, placement: 'top' });
+  const triggerRef = useRef<HTMLDivElement>(null);
+
+  const calculatePosition = useCallback(() => {
+    if (!triggerRef.current) return;
+    const rect = triggerRef.current.getBoundingClientRect();
+    const tooltipWidth = 240;
+    const estimatedHeight = 70;
+
+    // Prefer positioning on 'top' so it never obscures the transaction row below.
+    // Flip to 'bottom' only if there is not enough space above (< 80px).
+    const spaceAbove = rect.top;
+    const placement = spaceAbove < estimatedHeight + 10 ? 'bottom' : 'top';
+
+    const top = placement === 'top' ? rect.top - 8 : rect.bottom + 8;
+
+    // Center horizontally relative to trigger, clamped to viewport margins
+    let left = rect.left + rect.width / 2;
+    const padding = 16;
+    const halfWidth = tooltipWidth / 2;
+    if (left - halfWidth < padding) {
+      left = padding + halfWidth;
+    } else if (left + halfWidth > window.innerWidth - padding) {
+      left = window.innerWidth - padding - halfWidth;
+    }
+
+    setPosition({ top, left, placement });
+  }, []);
+
+  const handleMouseEnter = () => {
+    calculatePosition();
+    setIsVisible(true);
+  };
+
+  const handleMouseLeave = () => {
+    setIsVisible(false);
+  };
+
+  useEffect(() => {
+    if (!isVisible) return;
+    const handleScrollOrResize = () => {
+      calculatePosition();
+    };
+    window.addEventListener('scroll', handleScrollOrResize, true);
+    window.addEventListener('resize', handleScrollOrResize);
+    return () => {
+      window.removeEventListener('scroll', handleScrollOrResize, true);
+      window.removeEventListener('resize', handleScrollOrResize);
+    };
+  }, [isVisible, calculatePosition]);
+
+  if (!notes || !notes.trim()) {
+    return (
+      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+        Ada Kendala
+      </span>
+    );
+  }
+
+  return (
+    <div
+      ref={triggerRef}
+      onMouseEnter={handleMouseEnter}
+      onMouseLeave={handleMouseLeave}
+      onFocus={handleMouseEnter}
+      onBlur={handleMouseLeave}
+      tabIndex={0}
+      className="inline-flex flex-col items-center cursor-pointer group focus:outline-none"
+    >
+      <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 group-hover:bg-amber-200 transition-colors">
+        Ada Kendala
+      </span>
+      <p className="text-[10px] text-amber-700 mt-0.5 max-w-[110px] truncate underline decoration-dotted decoration-amber-400 underline-offset-2">
+        {notes}
+      </p>
+
+      {isVisible && (
+        <div
+          style={{
+            position: 'fixed',
+            top: `${position.top}px`,
+            left: `${position.left}px`,
+            transform: position.placement === 'top' ? 'translate(-50%, -100%)' : 'translate(-50%, 0)',
+            zIndex: 60,
+          }}
+          role="tooltip"
+          className="pointer-events-none w-60 max-w-[90vw] p-2.5 rounded-lg bg-slate-900 text-white text-xs shadow-xl border border-slate-700 whitespace-normal text-left animate-in fade-in zoom-in-95 duration-150"
+        >
+          <div className="flex items-center gap-1.5 font-semibold text-amber-400 mb-1">
+            <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+            <span>Catatan Kendala:</span>
+          </div>
+          <p className="text-slate-200 text-[11px] leading-relaxed break-words">
+            {notes}
+          </p>
+          <div
+            className={`absolute left-1/2 -translate-x-1/2 w-2 h-2 bg-slate-900 border-slate-700 rotate-45 ${
+              position.placement === 'top'
+                ? 'bottom-[-5px] border-r border-b'
+                : 'top-[-5px] border-l border-t'
+            }`}
+          />
+        </div>
+      )}
+    </div>
+  );
 }
 
 export default function AdminDashboardPage() {
@@ -793,16 +909,13 @@ export default function AdminDashboardPage() {
                               Dipinjam
                             </span>
                           ) : loan.return_condition === 'REPORTED_ISSUE' ? (
-                            <div className="inline-flex flex-col items-center">
+                            loan.damage_notes ? (
+                              <DamageNotesTooltip notes={loan.damage_notes} />
+                            ) : (
                               <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                                 Ada Kendala
                               </span>
-                              {loan.damage_notes && (
-                                <p className="text-[10px] text-amber-700 mt-0.5 max-w-[110px] truncate" title={loan.damage_notes}>
-                                  {loan.damage_notes}
-                                </p>
-                              )}
-                            </div>
+                            )
                           ) : (
                             <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                               Selesai
