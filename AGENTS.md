@@ -1,4 +1,4 @@
-# SmartProjex — Aturan Agen Antigravity
+# PINJAM — Aturan Agen Antigravity
 
 ## Sumber kebenaran dan prioritas
 - `PRD.md` adalah sumber kebenaran produk. Implementasi harus mengikuti PRD Revisi 3.

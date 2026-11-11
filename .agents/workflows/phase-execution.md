@@ -1,4 +1,4 @@
-# Execute a SmartProjex Phase
+# Execute a PINJAM Phase
 
 1. Read `PRD.md`, root `AGENTS.md`, and the relevant `.agents/rules/`.
 2. Inspect current repository state, git diff/status, dependencies, and existing implementation. Do not overwrite existing work.
