@@ -669,18 +669,18 @@ export default function AdminDashboardPage() {
             </div>
           ) : (
             <div className="overflow-x-auto">
-              <table className="w-full text-left border-collapse text-xs">
+              <table className="w-full min-w-[1100px] text-left border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                    <th className="py-3 px-4">Waktu Pinjam &amp; Batas</th>
-                    <th className="py-3 px-4">Waktu Kembali</th>
-                    <th className="py-3 px-4">Peminjam</th>
-                    <th className="py-3 px-4">Kelas</th>
-                    <th className="py-3 px-4">Proyektor</th>
-                    <th className="py-3 px-4">Dokumentasi</th>
-                    <th className="py-3 px-4">Pengembali</th>
-                    <th className="py-3 px-4">Petugas</th>
-                    <th className="py-3 px-4 text-center">Status</th>
+                    <th className="py-3 px-4 min-w-[160px]">Waktu Pinjam &amp; Batas</th>
+                    <th className="py-3 px-4 min-w-[140px]">Waktu Kembali</th>
+                    <th className="py-3 px-4 min-w-[150px]">Peminjam</th>
+                    <th className="py-3 px-4 min-w-[140px]">Kelas</th>
+                    <th className="py-3 px-4 min-w-[130px]">Proyektor</th>
+                    <th className="py-3 px-4 min-w-[110px]">Dokumentasi</th>
+                    <th className="py-3 px-4 min-w-[130px]">Pengembali</th>
+                    <th className="py-3 px-4 min-w-[130px]">Petugas</th>
+                    <th className="py-3 pl-4 pr-6 sm:pr-8 text-center min-w-[140px]">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-100 text-slate-800">
@@ -785,24 +785,24 @@ export default function AdminDashboardPage() {
                         </td>
 
                         {/* Status */}
-                        <td className="py-3 px-4 whitespace-nowrap text-center">
+                        <td className="py-3 pl-4 pr-6 sm:pr-8 whitespace-nowrap text-center">
                           {loan.status === 'ACTIVE' ? (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
                               Dipinjam
                             </span>
                           ) : loan.return_condition === 'REPORTED_ISSUE' ? (
-                            <div>
-                              <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                            <div className="inline-flex flex-col items-center">
+                              <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
                                 Ada Kendala
                               </span>
                               {loan.damage_notes && (
-                                <p className="text-[10px] text-amber-700 mt-0.5 max-w-[100px] truncate mx-auto">
+                                <p className="text-[10px] text-amber-700 mt-0.5 max-w-[120px] truncate" title={loan.damage_notes}>
                                   {loan.damage_notes}
                                 </p>
                               )}
                             </div>
                           ) : (
-                            <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                            <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
                               Selesai
                             </span>
                           )}
