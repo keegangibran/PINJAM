@@ -85,7 +85,7 @@ describe('Admin Export Loans CSV & Excel API (GET /api/admin/export/loans)', () 
 
     expect(res.status).toBe(200);
     expect(res.headers.get('Content-Type')).toBe('text/csv; charset=utf-8');
-    expect(res.headers.get('Content-Disposition')).toContain('attachment; filename="smartprojex-transaksi-2026-11-01-sd-2026-11-06.csv"');
+    expect(res.headers.get('Content-Disposition')).toContain('attachment; filename="pinjam-transaksi-2026-11-01-sd-2026-11-06.csv"');
 
     // Must start with UTF-8 BOM (EF BB BF) for Microsoft Excel compatibility
     const arrayBuffer = await res.arrayBuffer();
@@ -178,12 +178,14 @@ describe('Admin Export Loans CSV & Excel API (GET /api/admin/export/loans)', () 
       'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
     );
     expect(res.headers.get('Content-Disposition')).toContain(
-      'attachment; filename="smartprojex-transaksi-2026-11-01-sd-2026-11-06.xlsx"'
+      'attachment; filename="pinjam-transaksi-2026-11-01-sd-2026-11-06.xlsx"'
     );
 
     const arrayBuffer = await res.arrayBuffer();
     const workbook = new ExcelJS.Workbook();
     await workbook.xlsx.load(arrayBuffer);
+
+    expect(workbook.creator).toBe('PINJAM');
 
     const worksheet = workbook.getWorksheet('Riwayat Transaksi');
     expect(worksheet).toBeDefined();

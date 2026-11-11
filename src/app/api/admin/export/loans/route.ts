@@ -202,7 +202,7 @@ export async function GET(request: NextRequest) {
 
     if (formatParam === 'xlsx') {
       const workbook = new ExcelJS.Workbook();
-      workbook.creator = 'SmartProjex PINJAM';
+      workbook.creator = 'PINJAM';
       workbook.lastModifiedBy = authContext.staffProfile?.name || 'Administrator';
       workbook.created = new Date();
       workbook.modified = new Date();
@@ -294,7 +294,7 @@ export async function GET(request: NextRequest) {
       });
 
       const buffer = await workbook.xlsx.writeBuffer();
-      const filename = `smartprojex-transaksi-${fromParam || 'all'}-sd-${toParam || 'all'}.xlsx`;
+      const filename = `pinjam-transaksi-${fromParam || 'all'}-sd-${toParam || 'all'}.xlsx`;
 
       return new Response(new Uint8Array(buffer), {
         status: 200,
@@ -315,7 +315,7 @@ export async function GET(request: NextRequest) {
 
     // Prepend UTF-8 BOM (\uFEFF) untuk kompatibilitas Microsoft Excel
     const csvContent = '\uFEFF' + rows.join('\r\n');
-    const filename = `smartprojex-transaksi-${fromParam || 'all'}-sd-${toParam || 'all'}.csv`;
+    const filename = `pinjam-transaksi-${fromParam || 'all'}-sd-${toParam || 'all'}.csv`;
 
     return new Response(csvContent, {
       status: 200,
