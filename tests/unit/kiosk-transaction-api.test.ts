@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { POST as processTransaction } from '@/app/api/kiosk/transaction/route';
 import * as guards from '@/lib/auth/guards';
 
@@ -31,6 +31,10 @@ describe('Kiosk Transaction API Unit Tests (FR-06, FR-07, NFR-02, NFR-06)', () =
       role: 'STAFF',
       staffProfile: { id: 'stf-1', name: 'Petugas Loket', role: 'STAFF', isActive: true },
     });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
   });
 
   it('rejects oversized photo (> 250 KB) with 400 IMAGE_TOO_LARGE (NFR-02)', async () => {
@@ -289,6 +293,130 @@ describe('Kiosk Transaction API Unit Tests (FR-06, FR-07, NFR-02, NFR-06)', () =
         p_projector_code: 'PROJ-001',
         p_condition: 'NORMAL',
         p_kiosk_session_id: '11111111-1111-4111-a111-111111111111',
+        p_due_at: expect.stringMatching(/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d{3}Z$/),
+      })
+    );
+  });
+
+  it.each([
+    {
+      label: 'sebelum jam tutup (03:00 UTC / 10:00 WIB -> 17:00 WIB / 10:00 UTC)',
+      nowIso: '2026-11-12T03:00:00.000Z',
+      expectedDueAtIso: '2026-11-12T10:00:00.000Z',
+    },
+    {
+      label: 'tepat jam tutup (10:00 UTC / 17:00 WIB -> 19:00 WIB / 12:00 UTC)',
+      nowIso: '2026-11-12T10:00:00.000Z',
+      expectedDueAtIso: '2026-11-12T12:00:00.000Z',
+    },
+    {
+      label: 'setelah jam tutup (11:30 UTC / 18:30 WIB -> 20:30 WIB / 13:30 UTC)',
+      nowIso: '2026-11-12T11:30:00.000Z',
+      expectedDueAtIso: '2026-11-12T13:30:00.000Z',
+    },
+  ])('calculates WIB p_due_at deterministically for $label', async ({ nowIso, expectedDueAtIso }) => {
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date(nowIso));
+
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({ data: null }),
+    }));
+
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: { id: 'proj-1', code: 'PROJ-001', status: 'AVAILABLE' },
+      }),
+    }));
+
+    mockAdminRpc.mockResolvedValueOnce({
+      data: {
+        success: true,
+        action: 'BORROW',
+        loan_id: 'loan-new-tz',
+        projector_code: 'PROJ-001',
+        status: 'BORROWED',
+      },
+      error: null,
+    });
+
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: `idem-key-tz-${Date.now()}`,
+        projector_code: 'PROJ-001',
+        kiosk_session_id: '11111111-1111-4111-a111-111111111111',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+      }),
+    });
+
+    const res = await processTransaction(req);
+    expect(res.status).toBe(200);
+    expect(mockAdminRpc).toHaveBeenCalledWith(
+      'process_loan_transaction',
+      expect.objectContaining({
+        p_due_at: expectedDueAtIso,
+      })
+    );
+  });
+
+  it('passes p_due_at as null when processing a RETURN transaction (BORROWED unit)', async () => {
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({ data: null }),
+    }));
+
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: { id: 'proj-1', code: 'PROJ-001', status: 'BORROWED' },
+      }),
+    }));
+
+    mockAdminRpc.mockResolvedValueOnce({
+      data: {
+        success: true,
+        action: 'RETURN',
+        loan_id: 'loan-prev-1',
+        projector_code: 'PROJ-001',
+        status: 'AVAILABLE',
+      },
+      error: null,
+    });
+
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'idem-key-validreturn-12345',
+        projector_code: 'PROJ-001',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+        returner: { type: 'BORROWER' },
+      }),
+    });
+
+    const res = await processTransaction(req);
+    const json = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(json.data.action).toBe('RETURN');
+    expect(mockAdminRpc).toHaveBeenCalledWith(
+      'process_loan_transaction',
+      expect.objectContaining({
+        p_due_at: null,
+        p_returner_type: 'BORROWER',
       })
     );
   });

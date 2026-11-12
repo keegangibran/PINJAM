@@ -1,6 +1,7 @@
 import { requireStaff } from '@/lib/auth/guards';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { getBase64SizeBytes, isValidImageMimeType, MAX_PHOTO_SIZE_BYTES } from '@/lib/image';
+import { calculateDueAt } from '@/lib/timezone';
 import { recordAuditLog } from '@/lib/audit';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -184,19 +185,10 @@ export async function POST(request: Request) {
       );
     }
 
-    // 6. Hitung estimasi due_at jika peminjaman baru (jam 17:00 WIB hari ini)
+    // 6. Hitung estimasi due_at jika peminjaman baru (17:00 WIB hari ini atau fallback +2 jam)
     let dueAt: string | null = null;
     if (projector.status === 'AVAILABLE') {
-      const now = new Date();
-      // Default jam 17:00 WIB
-      const todayDue = new Date(now);
-      todayDue.setHours(17, 0, 0, 0);
-
-      // Jika transaksi dilakukan setelah jam 17:00, fallback 2 jam
-      if (now.getTime() >= todayDue.getTime()) {
-        todayDue.setTime(now.getTime() + 2 * 60 * 60 * 1000);
-      }
-      dueAt = todayDue.toISOString();
+      dueAt = calculateDueAt(new Date()).toISOString();
     }
 
     // 7. Eksekusi fungsi atomik PL/pgSQL process_loan_transaction
