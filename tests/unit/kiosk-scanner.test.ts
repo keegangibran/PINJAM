@@ -3,6 +3,8 @@ import {
   DEFAULT_SCAN_COOLDOWN_MS,
   normalizeQrToken,
   normalizeProjectorCode,
+  isLikelyJwsToken,
+  validateProjectorScanInput,
   createInitialScanGuardState,
   canAcceptScan,
   markScanStarted,
@@ -32,6 +34,39 @@ describe('Kiosk Scanner Helper Unit Tests (src/lib/kiosk-scanner.ts)', () => {
     it('returns null for empty or whitespace-only projector codes', () => {
       expect(normalizeProjectorCode('')).toBeNull();
       expect(normalizeProjectorCode('   \r\n ')).toBeNull();
+    });
+
+    it('detects JWS tokens and rejects non-projector QR payloads without echoing raw input', () => {
+      const sampleJws =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwidiI6MX0.AbCdEfGhIjKlMnOpQrStUvWxYz123456';
+      expect(isLikelyJwsToken(sampleJws)).toBe(true);
+      expect(isLikelyJwsToken(sampleJws.toUpperCase())).toBe(true);
+      expect(isLikelyJwsToken('PROJ-001')).toBe(false);
+      expect(isLikelyJwsToken('TEST-PROJ-001')).toBe(false);
+
+      const jwsCheck = validateProjectorScanInput(sampleJws);
+      expect(jwsCheck.valid).toBe(false);
+      if (!jwsCheck.valid) {
+        expect(jwsCheck.errorCode).toBe('INVALID_PROJECTOR_QR_TYPE');
+        expect(jwsCheck.message).toBe(
+          'QR Code tidak dikenali sebagai kode proyektor. Silakan pindai QR Code unit proyektor yang benar.'
+        );
+        expect(jwsCheck.message).not.toContain('eyJ');
+        expect(jwsCheck.message).not.toContain('EYJ');
+      }
+
+      const urlCheck = validateProjectorScanInput('https://example.com/unknown?token=secret');
+      expect(urlCheck.valid).toBe(false);
+      if (!urlCheck.valid) {
+        expect(urlCheck.errorCode).toBe('INVALID_PROJECTOR_QR_TYPE');
+        expect(urlCheck.message).not.toContain('https://');
+        expect(urlCheck.message).not.toContain('secret');
+      }
+
+      expect(validateProjectorScanInput('  proj-001\n')).toEqual({
+        valid: true,
+        normalizedCode: 'PROJ-001',
+      });
     });
   });
 

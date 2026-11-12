@@ -1,7 +1,7 @@
 import {
-  normalizeProjectorCode,
   normalizeQrToken,
   resolveReturnerContext,
+  validateProjectorScanInput,
   type ReturnerContextResult,
 } from '@/lib/kiosk-scanner';
 import { formatWib } from '@/lib/timezone';
@@ -237,11 +237,11 @@ export async function executeProjectorQrScan(params: {
   stopScanner: () => Promise<void>;
   fetchImpl?: typeof fetch;
 }): Promise<ProjectorScanSuccess | KioskWorkflowFailure> {
-  const normalizedCode = normalizeProjectorCode(params.code);
-  if (!normalizedCode) {
+  const validation = validateProjectorScanInput(params.code);
+  if (!validation.valid) {
     return {
       ok: false,
-      errorMessage: 'Kode unit proyektor wajib diisi.',
+      errorMessage: validation.message,
     };
   }
 
@@ -251,7 +251,7 @@ export async function executeProjectorQrScan(params: {
     const res = await doFetch('/api/kiosk/unit', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ projector_code: normalizedCode }),
+      body: JSON.stringify({ projector_code: validation.normalizedCode }),
     });
 
     const json = (await res.json()) as ApiResponseBody<KioskProjectorInfo>;
@@ -259,7 +259,9 @@ export async function executeProjectorQrScan(params: {
     if (!res.ok || !json.data) {
       return {
         ok: false,
-        errorMessage: json.error?.message || 'Kode proyektor tidak ditemukan.',
+        errorMessage:
+          json.error?.message ||
+          'Kode proyektor tidak ditemukan. Pastikan QR Code yang dipindai merupakan QR Code unit yang terdaftar.',
       };
     }
 

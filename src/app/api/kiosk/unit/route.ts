@@ -1,4 +1,5 @@
 import { requireStaff } from '@/lib/auth/guards';
+import { validateProjectorScanInput } from '@/lib/kiosk-scanner';
 import { createAdminClient } from '@/lib/supabase/admin';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
@@ -20,7 +21,15 @@ export async function POST(request: Request) {
       );
     }
 
-    const code = parsed.data.projector_code.trim().toUpperCase();
+    const validation = validateProjectorScanInput(parsed.data.projector_code);
+    if (!validation.valid) {
+      return NextResponse.json(
+        { error: { code: validation.errorCode, message: validation.message } },
+        { status: 400 }
+      );
+    }
+
+    const code = validation.normalizedCode;
     const adminClient = createAdminClient();
 
     // 1. Ambil data proyektor
@@ -32,7 +41,13 @@ export async function POST(request: Request) {
 
     if (projectorError || !projector) {
       return NextResponse.json(
-        { error: { code: 'PROJECTOR_NOT_FOUND', message: `Proyektor dengan kode "${code}" tidak ditemukan.` } },
+        {
+          error: {
+            code: 'PROJECTOR_NOT_FOUND',
+            message:
+              'Kode proyektor tidak ditemukan. Pastikan QR Code yang dipindai merupakan QR Code unit yang terdaftar.',
+          },
+        },
         { status: 404 }
       );
     }

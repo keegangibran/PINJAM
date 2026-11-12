@@ -51,6 +51,52 @@ describe('Kiosk Unit API Unit Tests (FR-05, FT-02)', () => {
     const data = await res.json();
     expect(res.status).toBe(404);
     expect(data.error.code).toBe('PROJECTOR_NOT_FOUND');
+    expect(data.error.message).toBe(
+      'Kode proyektor tidak ditemukan. Pastikan QR Code yang dipindai merupakan QR Code unit yang terdaftar.'
+    );
+    expect(data.error.message).not.toContain('UNKNOWN-999');
+  });
+
+  it('rejects student QR Pass JWS token with 400 INVALID_PROJECTOR_QR_TYPE without leaking token', async () => {
+    const jwsToken =
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJzdHUtMTIzIiwidiI6MX0.SignaturePartHere12345';
+
+    const req = new Request('http://localhost/api/kiosk/unit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projector_code: jwsToken }),
+    });
+
+    const res = await getKioskUnit(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error.code).toBe('INVALID_PROJECTOR_QR_TYPE');
+    expect(data.error.message).toBe(
+      'QR Code tidak dikenali sebagai kode proyektor. Silakan pindai QR Code unit proyektor yang benar.'
+    );
+    expect(data.error.message).not.toContain(jwsToken);
+    expect(data.error.message).not.toContain(jwsToken.toUpperCase());
+    expect(mockAdminFrom).not.toHaveBeenCalled();
+  });
+
+  it('rejects arbitrary non-projector QR strings with 400 without echoing raw content', async () => {
+    const rawQr = 'https://kampus.example.id/verif?raw=SENSITIVE_RAW_VALUE';
+
+    const req = new Request('http://localhost/api/kiosk/unit', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ projector_code: rawQr }),
+    });
+
+    const res = await getKioskUnit(req);
+    const data = await res.json();
+
+    expect(res.status).toBe(400);
+    expect(data.error.code).toBe('INVALID_PROJECTOR_QR_TYPE');
+    expect(data.error.message).not.toContain('SENSITIVE_RAW_VALUE');
+    expect(data.error.message).not.toContain('https://');
+    expect(mockAdminFrom).not.toHaveBeenCalled();
   });
 
   it('returns AVAILABLE projector with active_loan = null', async () => {

@@ -31,6 +31,21 @@ export interface ReturnerContextResult {
   mismatchWarning: string | null;
 }
 
+export interface ProjectorScanValidationResult {
+  valid: true;
+  normalizedCode: string;
+}
+
+export interface ProjectorScanValidationError {
+  valid: false;
+  errorCode: 'VALIDATION_ERROR' | 'INVALID_PROJECTOR_QR_TYPE';
+  message: string;
+}
+
+const THREE_PART_JWS_PATTERN = /^[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}\.[A-Za-z0-9_-]{6,}$/;
+const JWT_HEADER_PREFIX_PATTERN = /^eyJ[A-Za-z0-9_-]{4,}\.[A-Za-z0-9_-]+(?:\.[A-Za-z0-9_-]*)?$/i;
+const VALID_PROJECTOR_CODE_PATTERN = /^[A-Z0-9_-]{2,30}$/;
+
 /**
  * Membersihkan whitespace, karakter CR/LF dari input scanner USB atau kamera QR Pass.
  * Mengembalikan null bila kosong. Tidak mengubah kapitalisasi token JWT.
@@ -49,6 +64,48 @@ export function normalizeProjectorCode(raw: string): string | null {
   if (typeof raw !== 'string') return null;
   const normalized = raw.trim().toUpperCase();
   return normalized.length > 0 ? normalized : null;
+}
+
+/**
+ * Mendeteksi apakah input hasil pemindaian menyerupai token JWS/JWT (mis. QR Pass mahasiswa).
+ * Bekerja baik sebelum maupun sesudah normalisasi huruf besar.
+ */
+export function isLikelyJwsToken(raw: string): boolean {
+  if (typeof raw !== 'string') return false;
+  const trimmed = raw.trim();
+  if (!trimmed) return false;
+  return THREE_PART_JWS_PATTERN.test(trimmed) || JWT_HEADER_PREFIX_PATTERN.test(trimmed);
+}
+
+/**
+ * Memvalidasi input QR Code atau teks manual untuk unit proyektor sebelum lookup DB.
+ * Menolak token JWS mahasiswa atau format non-unit tanpa mengembalikan nilai mentah input.
+ */
+export function validateProjectorScanInput(
+  raw: string
+): ProjectorScanValidationResult | ProjectorScanValidationError {
+  const normalized = normalizeProjectorCode(raw);
+  if (!normalized) {
+    return {
+      valid: false,
+      errorCode: 'VALIDATION_ERROR',
+      message: 'Kode unit proyektor wajib diisi.',
+    };
+  }
+
+  if (isLikelyJwsToken(normalized) || !VALID_PROJECTOR_CODE_PATTERN.test(normalized)) {
+    return {
+      valid: false,
+      errorCode: 'INVALID_PROJECTOR_QR_TYPE',
+      message:
+        'QR Code tidak dikenali sebagai kode proyektor. Silakan pindai QR Code unit proyektor yang benar.',
+    };
+  }
+
+  return {
+    valid: true,
+    normalizedCode: normalized,
+  };
 }
 
 /**

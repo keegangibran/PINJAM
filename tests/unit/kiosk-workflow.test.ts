@@ -246,6 +246,69 @@ describe('Kiosk Integration & Workflow Tests (src/lib/kiosk-workflow.ts & src/ap
       }
       expect(stopScanner).not.toHaveBeenCalled();
     });
+
+    it('rejects student QR Pass token scanned on Step 2 locally without API leak or console logging', async () => {
+      const logSpy = vi.spyOn(console, 'log').mockImplementation(() => undefined);
+      const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const errSpy = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      const studentJws =
+        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTExMTExMSIsInYiOjF9.SecretSignatureValue987654';
+      const stopScanner = vi.fn(async () => undefined);
+      const fetchMock = vi.fn<typeof fetch>();
+
+      const res = await executeProjectorQrScan({
+        code: studentJws.toUpperCase(),
+        isDirectReturnMode: false,
+        scannedStudent: { id: MOCK_STUDENT_A.id, name: MOCK_STUDENT_A.name },
+        stopScanner,
+        fetchImpl: fetchMock,
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.errorMessage).toBe(
+          'QR Code tidak dikenali sebagai kode proyektor. Silakan pindai QR Code unit proyektor yang benar.'
+        );
+        expect(res.errorMessage).not.toContain('EYJHBG');
+        expect(res.errorMessage).not.toContain('SecretSignatureValue');
+      }
+      expect(fetchMock).not.toHaveBeenCalled();
+      expect(stopScanner).not.toHaveBeenCalled();
+      expect(logSpy).not.toHaveBeenCalled();
+      expect(warnSpy).not.toHaveBeenCalled();
+      expect(errSpy).not.toHaveBeenCalled();
+    });
+
+    it('returns generic error message when valid-format projector code is not found', async () => {
+      const stopScanner = vi.fn(async () => undefined);
+      const fetchMock = vi.fn<typeof fetch>(async () =>
+        createJsonResponse(404, {
+          error: {
+            code: 'PROJECTOR_NOT_FOUND',
+            message:
+              'Kode proyektor tidak ditemukan. Pastikan QR Code yang dipindai merupakan QR Code unit yang terdaftar.',
+          },
+        })
+      );
+
+      const res = await executeProjectorQrScan({
+        code: 'PROJ-999',
+        isDirectReturnMode: false,
+        scannedStudent: { id: MOCK_STUDENT_A.id, name: MOCK_STUDENT_A.name },
+        stopScanner,
+        fetchImpl: fetchMock,
+      });
+
+      expect(res.ok).toBe(false);
+      if (!res.ok) {
+        expect(res.errorMessage).toBe(
+          'Kode proyektor tidak ditemukan. Pastikan QR Code yang dipindai merupakan QR Code unit yang terdaftar.'
+        );
+        expect(res.errorMessage).not.toContain('PROJ-999');
+      }
+      expect(stopScanner).not.toHaveBeenCalled();
+    });
   });
 
   describe('Return Flows: Same Borrower, Different Student, and Direct Representative Return (FR-07)', () => {
