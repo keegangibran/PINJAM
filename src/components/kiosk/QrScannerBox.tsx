@@ -1,6 +1,14 @@
 'use client';
 
-import React, { useEffect, useId, useRef, useState, useCallback } from 'react';
+import React, {
+  useEffect,
+  useId,
+  useImperativeHandle,
+  useRef,
+  useState,
+  useCallback,
+  type Ref,
+} from 'react';
 import type { CameraDevice, Html5QrcodeCameraScanConfig } from 'html5-qrcode';
 import {
   DEFAULT_SCAN_COOLDOWN_MS,
@@ -61,6 +69,10 @@ export interface QrScannerControllerOptions {
   onScannerStopped?: () => void;
 }
 
+export interface QrScannerBoxHandle {
+  stop: () => Promise<void>;
+}
+
 export interface QrScannerBoxProps {
   mode: QrScannerMode;
   onScan: (normalizedPayload: string) => void | Promise<void>;
@@ -69,6 +81,7 @@ export interface QrScannerBoxProps {
   instructionText?: string;
   containerId?: string;
   cooldownMs?: number;
+  scannerRef?: Ref<QrScannerBoxHandle>;
 }
 
 /**
@@ -370,6 +383,7 @@ export default function QrScannerBox({
   instructionText,
   containerId,
   cooldownMs = DEFAULT_SCAN_COOLDOWN_MS,
+  scannerRef,
 }: QrScannerBoxProps) {
   const reactId = useId();
   const scannerElementId = containerId || `pinjam-qr-scanner-${reactId.replace(/:/g, '')}`;
@@ -397,6 +411,14 @@ export default function QrScannerBox({
       onScannerStopped: () => onStoppedRef.current?.(),
     });
   }
+
+  useImperativeHandle(
+    scannerRef,
+    () => ({
+      stop: () => controllerRef.current?.stop() ?? Promise.resolve(),
+    }),
+    []
+  );
 
   useEffect(() => {
     controllerRef.current?.updateCallbacks(mode, (payload) => onScanRef.current(payload));

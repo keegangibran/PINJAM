@@ -1,35 +1,33 @@
 'use client';
 /* eslint-disable @next/next/no-img-element */
 
-import { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import QrScannerBox, { type QrScannerBoxHandle } from '@/components/kiosk/QrScannerBox';
+import {
+  canSubmitKioskTransaction,
+  executeDirectReturnTransition,
+  executeManualLookupSession,
+  executeProjectorQrScan,
+  executeStudentQrScan,
+  formatKioskDueAt,
+  type KioskManualSearchStudent,
+  type KioskProjectorInfo,
+  type KioskStudentInfo,
+  type KioskTransactionSuccess,
+} from '@/lib/kiosk-workflow';
 
-interface StudentInfo {
-  id: string;
-  name: string;
-  nim: string;
-  class_name: string;
-  profile_photo_signed_url: string | null;
-  identification_method: 'QR' | 'MANUAL_LOOKUP';
-}
-
-interface ProjectorInfo {
-  id: string;
-  code: string;
-  name: string;
-  status: 'AVAILABLE' | 'BORROWED' | 'MAINTENANCE' | 'INACTIVE';
-  notes?: string;
-  active_loan?: {
-    loan_id: string;
-    student_id: string;
-    student_name: string;
-    student_nim: string;
-    class_name: string;
-    borrowed_at: string;
-    due_at: string;
-    is_overdue: boolean;
-    profile_photo_signed_url: string | null;
-  } | null;
+interface KioskTransactionPayload {
+  idempotency_key: string;
+  projector_code: string;
+  photo_base64: string;
+  condition: 'NORMAL' | 'ISSUE';
+  issue_notes?: string;
+  kiosk_session_id?: string | null;
+  returner?: {
+    type: 'BORROWER' | 'REPRESENTATIVE';
+    name?: string;
+  };
 }
 
 export default function KioskPage() {
@@ -38,22 +36,27 @@ export default function KioskPage() {
 
   // Session Data
   const [kioskSessionId, setKioskSessionId] = useState<string | null>(null);
-  const [student, setStudent] = useState<StudentInfo | null>(null);
-  const [projector, setProjector] = useState<ProjectorInfo | null>(null);
+  const [student, setStudent] = useState<KioskStudentInfo | null>(null);
+  const [projector, setProjector] = useState<KioskProjectorInfo | null>(null);
+  const [isDirectReturnMode, setIsDirectReturnMode] = useState(false);
 
   // Return Flow State
   const [returnerType, setReturnerType] = useState<'BORROWER' | 'REPRESENTATIVE'>('BORROWER');
   const [representativeName, setRepresentativeName] = useState('');
+  const [representativeConfirmed, setRepresentativeConfirmed] = useState(false);
+  const [returnerMismatchWarning, setReturnerMismatchWarning] = useState<string | null>(null);
 
   // Scanner & Input State
   const [scannerInput, setScannerInput] = useState('');
   const [scanningLoading, setScanningLoading] = useState(false);
+  const [isCameraTransitioning, setIsCameraTransitioning] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const qrScannerRef = useRef<QrScannerBoxHandle | null>(null);
 
   // Manual Lookup Modal
   const [showManualModal, setShowManualModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<any[]>([]);
+  const [searchResults, setSearchResults] = useState<KioskManualSearchStudent[]>([]);
   const [searching, setSearching] = useState(false);
   const [selectedStudentId, setSelectedStudentId] = useState<string | null>(null);
   const [manualReason, setManualReason] = useState('');
@@ -61,6 +64,7 @@ export default function KioskPage() {
   // Webcam & Photo Capture State
   const videoRef = useRef<HTMLVideoElement>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const activePhotoStreamRef = useRef<MediaStream | null>(null);
   const [cameraActive, setCameraActive] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
@@ -70,28 +74,58 @@ export default function KioskPage() {
   const [conditionNotes, setConditionNotes] = useState('');
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [transactionSuccess, setTransactionSuccess] = useState<any | null>(null);
+  const [transactionSuccess, setTransactionSuccess] = useState<KioskTransactionSuccess | null>(null);
 
   // 30s Inactivity Auto-Reset
   const [inactivityTimer, setInactivityTimer] = useState<number>(30);
   const lastActivityRef = useRef<number>(Date.now());
 
-  const resetKiosk = useCallback(() => {
-    setCurrentStep(1);
-    setKioskSessionId(null);
-    setStudent(null);
-    setProjector(null);
-    setReturnerType('BORROWER');
-    setRepresentativeName('');
-    setScannerInput('');
-    setErrorMessage(null);
-    setCapturedPhoto(null);
-    setConditionNotes('');
-    setShowIssueModal(false);
-    setTransactionSuccess(null);
-    lastActivityRef.current = Date.now();
-    setInactivityTimer(30);
+  const stopPhotoStream = useCallback(() => {
+    if (activePhotoStreamRef.current) {
+      activePhotoStreamRef.current.getTracks().forEach((track) => track.stop());
+      activePhotoStreamRef.current = null;
+    }
+    if (videoRef.current) {
+      videoRef.current.srcObject = null;
+    }
+    setCameraActive(false);
   }, []);
+
+  const stopQrScannerSafely = useCallback(async () => {
+    setIsCameraTransitioning(true);
+    await qrScannerRef.current?.stop();
+  }, []);
+
+  const resetKiosk = useCallback(async () => {
+    stopPhotoStream();
+    try {
+      await stopQrScannerSafely();
+      setCurrentStep(1);
+      setKioskSessionId(null);
+      setStudent(null);
+      setProjector(null);
+      setIsDirectReturnMode(false);
+      setReturnerType('BORROWER');
+      setRepresentativeName('');
+      setRepresentativeConfirmed(false);
+      setReturnerMismatchWarning(null);
+      setScannerInput('');
+      setErrorMessage(null);
+      setShowManualModal(false);
+      setSearchQuery('');
+      setSearchResults([]);
+      setSelectedStudentId(null);
+      setManualReason('');
+      setCapturedPhoto(null);
+      setConditionNotes('');
+      setShowIssueModal(false);
+      setTransactionSuccess(null);
+      lastActivityRef.current = Date.now();
+      setInactivityTimer(30);
+    } finally {
+      setIsCameraTransitioning(false);
+    }
+  }, [stopPhotoStream, stopQrScannerSafely]);
 
   // Update activity timestamp on user interaction
   const recordActivity = useCallback(() => {
@@ -106,113 +140,176 @@ export default function KioskPage() {
       const remaining = Math.max(0, 30 - elapsedSeconds);
       setInactivityTimer(remaining);
 
-      // Reset otomatis jika sudah tidak aktif 30 detik (kecuali sedang memproses API atau di Step 1 kosong)
-      if (remaining === 0 && (kioskSessionId || projector || capturedPhoto)) {
-        resetKiosk();
+      // Reset otomatis jika sudah tidak aktif 30 detik (kecuali saat Step 1 kosong tanpa sesi)
+      if (remaining === 0 && (kioskSessionId || isDirectReturnMode || projector || capturedPhoto)) {
+        void resetKiosk();
       }
     }, 1000);
 
     return () => clearInterval(interval);
-  }, [kioskSessionId, projector, capturedPhoto, resetKiosk]);
+  }, [kioskSessionId, isDirectReturnMode, projector, capturedPhoto, resetKiosk]);
 
-  // Setup / Stop Webcam stream when reaching Step 3
+  // Setup / Stop Webcam stream when reaching Step 3 (hanya setelah scanner QR berhenti tuntas)
   useEffect(() => {
+    let cancelled = false;
     let stream: MediaStream | null = null;
 
-    if (currentStep === 3 && !capturedPhoto) {
-      setCameraError(null);
-      navigator.mediaDevices
-        ?.getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } })
-        .then((s) => {
-          stream = s;
-          if (videoRef.current) {
-            videoRef.current.srcObject = s;
-            videoRef.current.play();
-            setCameraActive(true);
-          }
-        })
-        .catch((err) => {
-          setCameraError(
-            'Kamera webcam tidak dapat diakses (' +
-              (err.message || 'Izin ditolak') +
-              '). Pastikan perangkat memiliki izin kamera.'
-          );
-          setCameraActive(false);
-        });
+    if (
+      currentStep !== 3 ||
+      capturedPhoto ||
+      isCameraTransitioning ||
+      showIssueModal ||
+      showManualModal
+    ) {
+      stopPhotoStream();
+      return;
     }
 
+    if (
+      typeof navigator === 'undefined' ||
+      !navigator.mediaDevices ||
+      typeof navigator.mediaDevices.getUserMedia !== 'function'
+    ) {
+      setCameraError(
+        'Kamera webcam tidak didukung pada konteks ini (wajib HTTPS atau localhost).'
+      );
+      setCameraActive(false);
+      return;
+    }
+
+    setCameraError(null);
+    navigator.mediaDevices
+      .getUserMedia({ video: { width: { ideal: 1280 }, height: { ideal: 720 }, facingMode: 'user' } })
+      .then((s) => {
+        if (cancelled) {
+          s.getTracks().forEach((track) => track.stop());
+          return;
+        }
+        stream = s;
+        activePhotoStreamRef.current = s;
+        if (videoRef.current) {
+          videoRef.current.srcObject = s;
+          void videoRef.current.play();
+          setCameraActive(true);
+        }
+      })
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        const msg = err instanceof Error && err.message ? err.message : 'Izin ditolak';
+        setCameraError(
+          `Kamera webcam tidak dapat diakses (${msg}). Pastikan perangkat memiliki izin kamera.`
+        );
+        setCameraActive(false);
+      });
+
     return () => {
+      cancelled = true;
       if (stream) {
         stream.getTracks().forEach((track) => track.stop());
       }
+      stopPhotoStream();
     };
-  }, [currentStep, capturedPhoto]);
+  }, [
+    currentStep,
+    capturedPhoto,
+    isCameraTransitioning,
+    showIssueModal,
+    showManualModal,
+    stopPhotoStream,
+  ]);
 
-  // Handler: Scan Student Token
+  // Handler: Open Manual Lookup Modal (FR-16) — hentikan scanner terlebih dahulu
+  const handleOpenManualModal = async () => {
+    recordActivity();
+    try {
+      await stopQrScannerSafely();
+      setShowManualModal(true);
+    } finally {
+      setIsCameraTransitioning(false);
+    }
+  };
+
+  // Handler: Direct Return Mode (FR-07 tanpa QR Pass mahasiswa)
+  const handleEnterDirectReturn = async () => {
+    recordActivity();
+    setScanningLoading(true);
+    setErrorMessage(null);
+    try {
+      const transition = await executeDirectReturnTransition({
+        stopScanner: stopQrScannerSafely,
+      });
+      setKioskSessionId(null);
+      setStudent(null);
+      setProjector(null);
+      setScannerInput('');
+      setIsDirectReturnMode(transition.isDirectReturnMode);
+      setReturnerType(transition.defaultReturnerType);
+      setRepresentativeName('');
+      setRepresentativeConfirmed(false);
+      setReturnerMismatchWarning(null);
+      setCurrentStep(transition.nextStep);
+    } finally {
+      setIsCameraTransitioning(false);
+      setScanningLoading(false);
+    }
+  };
+
+  // Handler: Scan Student Token (Webcam QR Scanner maupun Input Manual / USB Scanner)
   const handleStudentScan = async (token: string) => {
     recordActivity();
     setScanningLoading(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/kiosk/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ student_token: token.trim() }),
+      const result = await executeStudentQrScan({
+        token,
+        stopScanner: stopQrScannerSafely,
       });
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(json.error?.message || 'QR Pass tidak valid atau sudah kedaluwarsa.');
-      } else {
-        setKioskSessionId(json.data.kiosk_session_id);
-        setStudent(json.data.student);
-        setScannerInput('');
-        setCurrentStep(2); // Pindah ke Scan Unit
+      if (!result.ok) {
+        setErrorMessage(result.errorMessage);
+        return;
       }
-    } catch {
-      setErrorMessage('Terjadi gangguan jaringan saat memverifikasi QR Pass.');
+
+      setIsDirectReturnMode(false);
+      setReturnerMismatchWarning(null);
+      setRepresentativeConfirmed(false);
+      setKioskSessionId(result.kioskSessionId);
+      setStudent(result.student);
+      setScannerInput('');
+      setCurrentStep(result.nextStep);
     } finally {
+      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
 
-  // Handler: Execute Manual Lookup
+  // Handler: Execute Manual Lookup (FR-16)
   const handleManualLookupSubmit = async () => {
-    if (!selectedStudentId) {
-      setErrorMessage('Pilih salah satu ketua kelas.');
-      return;
-    }
-    if (!manualReason || manualReason.trim().length < 3) {
-      setErrorMessage('Alasan pencarian manual wajib diisi minimal 3 karakter.');
-      return;
-    }
-
     recordActivity();
     setScanningLoading(true);
+    setErrorMessage(null);
     try {
-      const res = await fetch('/api/kiosk/session', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          student_id: selectedStudentId,
-          reason: manualReason.trim(),
-        }),
+      const result = await executeManualLookupSession({
+        studentId: selectedStudentId,
+        reason: manualReason,
+        stopScanner: stopQrScannerSafely,
       });
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(json.error?.message || 'Pencarian manual gagal.');
-      } else {
-        setKioskSessionId(json.data.kiosk_session_id);
-        setStudent(json.data.student);
-        setShowManualModal(false);
-        setCurrentStep(2); // Pindah ke Scan Unit
+      if (!result.ok) {
+        setErrorMessage(result.errorMessage);
+        return;
       }
-    } catch {
-      setErrorMessage('Gangguan jaringan saat memproses identifikasi manual.');
+
+      setIsDirectReturnMode(false);
+      setReturnerMismatchWarning(null);
+      setRepresentativeConfirmed(false);
+      setKioskSessionId(result.kioskSessionId);
+      setStudent(result.student);
+      setShowManualModal(false);
+      setScannerInput('');
+      setCurrentStep(result.nextStep);
     } finally {
+      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
@@ -227,7 +324,7 @@ export default function KioskPage() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ q: searchQuery.trim() }),
       });
-      const json = await res.json();
+      const json = (await res.json()) as { data?: KioskManualSearchStudent[] };
       if (res.ok) {
         setSearchResults(json.data || []);
       }
@@ -238,39 +335,42 @@ export default function KioskPage() {
     }
   };
 
-  // Handler: Scan Projector Unit
+  // Handler: Scan Projector Unit (Webcam QR Scanner maupun Input Manual / USB Scanner)
   const handleProjectorScan = async (code: string) => {
     recordActivity();
     setScanningLoading(true);
     setErrorMessage(null);
     try {
-      const res = await fetch('/api/kiosk/unit', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ projector_code: code.trim().toUpperCase() }),
+      const result = await executeProjectorQrScan({
+        code,
+        isDirectReturnMode,
+        scannedStudent: student ? { id: student.id, name: student.name } : null,
+        stopScanner: stopQrScannerSafely,
       });
 
-      const json = await res.json();
-
-      if (!res.ok) {
-        setErrorMessage(json.error?.message || 'Kode proyektor tidak ditemukan.');
-      } else {
-        const projData: ProjectorInfo = json.data;
-
-        if (projData.status === 'INACTIVE' || projData.status === 'MAINTENANCE') {
-          setErrorMessage(
-            `Unit ${projData.code} berstatus ${projData.status} (${projData.notes || 'Tidak dapat digunakan'}).`
-          );
-          return;
-        }
-
-        setProjector(projData);
-        setScannerInput('');
-        setCurrentStep(3); // Pindah ke Dokumentasi Foto
+      if (!result.ok) {
+        setErrorMessage(result.errorMessage);
+        return;
       }
-    } catch {
-      setErrorMessage('Terjadi gangguan jaringan saat memverifikasi kode proyektor.');
+
+      setProjector(result.projector);
+      setScannerInput('');
+
+      if (result.returnerContext) {
+        setReturnerType(result.returnerContext.defaultReturnerType);
+        setRepresentativeName(result.returnerContext.prefilledRepresentativeName);
+        setReturnerMismatchWarning(result.returnerContext.mismatchWarning);
+        setRepresentativeConfirmed(false);
+      } else {
+        setReturnerType('BORROWER');
+        setRepresentativeName('');
+        setReturnerMismatchWarning(null);
+        setRepresentativeConfirmed(false);
+      }
+
+      setCurrentStep(result.nextStep);
     } finally {
+      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
@@ -311,7 +411,20 @@ export default function KioskPage() {
 
   // Submit Final Transaction (BORROW / RETURN)
   const handleFinalTransaction = async (condition: 'NORMAL' | 'ISSUE') => {
-    if (!projector || !capturedPhoto) return;
+    if (
+      !projector ||
+      !capturedPhoto ||
+      !canSubmitKioskTransaction({
+        projectorStatus: projector.status,
+        capturedPhoto,
+        isSubmitting,
+        returnerType,
+        representativeName,
+        representativeConfirmed,
+      })
+    ) {
+      return;
+    }
     recordActivity();
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -320,7 +433,7 @@ export default function KioskPage() {
     const idempotencyKey = crypto.randomUUID();
 
     try {
-      const payload: any = {
+      const payload: KioskTransactionPayload = {
         idempotency_key: idempotencyKey,
         projector_code: projector.code,
         photo_base64: capturedPhoto,
@@ -343,9 +456,12 @@ export default function KioskPage() {
         body: JSON.stringify(payload),
       });
 
-      const json = await res.json();
+      const json = (await res.json()) as {
+        data?: KioskTransactionSuccess;
+        error?: { message?: string };
+      };
 
-      if (!res.ok) {
+      if (!res.ok || !json.data) {
         setErrorMessage(json.error?.message || 'Transaksi gagal diproses oleh server.');
       } else {
         setTransactionSuccess(json.data);
@@ -360,6 +476,14 @@ export default function KioskPage() {
   };
 
   const isBorrow = projector?.status === 'AVAILABLE';
+  const canConfirmTransaction = canSubmitKioskTransaction({
+    projectorStatus: projector?.status,
+    capturedPhoto,
+    isSubmitting,
+    returnerType,
+    representativeName,
+    representativeConfirmed,
+  });
 
   return (
     <div
@@ -395,7 +519,7 @@ export default function KioskPage() {
 
           <button
             type="button"
-            onClick={resetKiosk}
+            onClick={() => void resetKiosk()}
             className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
           >
             Reset Sesi
@@ -418,12 +542,13 @@ export default function KioskPage() {
             className={`p-3 rounded-2xl border text-center transition-all ${
               currentStep === 1
                 ? 'bg-blue-600/20 border-blue-500 text-blue-400 ring-2 ring-blue-500/30'
-                : student
+                : student || isDirectReturnMode
                 ? 'bg-emerald-950/40 border-emerald-600/40 text-emerald-400'
                 : 'bg-slate-900/60 border-slate-800 text-slate-500'
             }`}
           >
-            1. Ketua Kelas {student && '✓'}
+            1. {isDirectReturnMode ? 'Pengembalian Langsung' : 'Ketua Kelas'}{' '}
+            {(student || isDirectReturnMode) && '✓'}
           </div>
           <div
             className={`p-3 rounded-2xl border text-center transition-all ${
@@ -475,58 +600,90 @@ export default function KioskPage() {
           </div>
         )}
 
-        {/* STEP 1: Scan Student QR or Manual Lookup */}
+        {/* STEP 1: Scan Student QR or Manual Lookup / Direct Return */}
         {currentStep === 1 && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 max-w-2xl mx-auto w-full text-center space-y-6 shadow-2xl">
-            <div className="space-y-2">
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto w-full text-center space-y-5 shadow-2xl">
+            <div className="space-y-1.5">
               <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
                 Langkah 1 dari 4
               </span>
               <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Pass Mahasiswa</h2>
               <p className="text-sm text-slate-400">
-                Arahkan layar ponsel ketua kelas yang menampilkan QR Pass ke arah pemindai meja TU.
+                Arahkan layar ponsel ketua kelas yang menampilkan QR Pass ke kamera webcam atau scanner USB TU.
               </p>
             </div>
 
-            {/* Scanner Input / Barcode reader input simulation */}
-            <div className="space-y-3">
+            {/* Webcam QR Scanner (FR-03) */}
+            <QrScannerBox
+              key="kiosk-step1-student-scanner"
+              mode="STUDENT_QR"
+              active={currentStep === 1 && !showManualModal && !isCameraTransitioning}
+              scannerRef={qrScannerRef}
+              onScan={(token) => void handleStudentScan(token)}
+            />
+
+            {/* Jalur Pengembalian Langsung oleh Perwakilan (FR-07) */}
+            <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+              <div>
+                <p className="text-xs font-bold text-amber-300">Pengembalian oleh Perwakilan (Tanpa QR Pass)</p>
+                <p className="text-[11px] text-amber-200/80">
+                  Pilih jalur ini jika unit dikembalikan oleh teman/perwakilan tanpa ketua kelas hadir.
+                </p>
+              </div>
+              <button
+                type="button"
+                disabled={scanningLoading || isCameraTransitioning}
+                onClick={() => void handleEnterDirectReturn()}
+                className="w-full sm:w-auto shrink-0 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-50"
+              >
+                Pengembalian Langsung (Perwakilan)
+              </button>
+            </div>
+
+            {/* Input Manual / USB Barcode Scanner Fallback */}
+            <div className="space-y-3 pt-2 border-t border-slate-800/80 text-left">
+              <label htmlFor="kiosk-student-token-input" className="block text-[11px] font-semibold text-slate-400">
+                Input Manual / Scanner Barcode USB:
+              </label>
               <div className="relative">
                 <input
+                  id="kiosk-student-token-input"
                   type="text"
                   autoFocus
                   value={scannerInput}
                   onChange={(e) => setScannerInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && scannerInput.trim()) {
-                      handleStudentScan(scannerInput.trim());
+                      void handleStudentScan(scannerInput.trim());
                     }
                   }}
                   placeholder="Tempelkan atau ketik token QR Pass di sini lalu Enter..."
                   className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
-                  disabled={scanningLoading}
+                  disabled={scanningLoading || isCameraTransitioning}
                 />
               </div>
 
-              <div className="flex gap-2">
+              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   type="button"
-                  disabled={scanningLoading || !scannerInput.trim()}
-                  onClick={() => handleStudentScan(scannerInput.trim())}
+                  disabled={scanningLoading || isCameraTransitioning || !scannerInput.trim()}
+                  onClick={() => void handleStudentScan(scannerInput.trim())}
                   className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
                 >
                   {scanningLoading ? 'Memverifikasi Token...' : 'Verifikasi QR'}
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowManualModal(true)}
-                  className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-colors"
+                  disabled={scanningLoading || isCameraTransitioning}
+                  onClick={() => void handleOpenManualModal()}
+                  className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
                 >
-                  Pencarian Manual (FR-08)
+                  Pencarian Manual (FR-16)
                 </button>
               </div>
             </div>
 
-            <div className="pt-4 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-center gap-2">
+            <div className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-center gap-2">
               <span>🔒</span>
               <span>Token bertanda tangan kriptografis server (HS256) berumur 60 detik.</span>
             </div>
@@ -534,34 +691,55 @@ export default function KioskPage() {
         )}
 
         {/* STEP 2: Scan Projector Unit */}
-        {currentStep === 2 && student && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-8 max-w-2xl mx-auto w-full space-y-6 shadow-2xl">
-            {/* Student Verified Badge Card */}
-            <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center gap-4">
-              {student.profile_photo_signed_url ? (
-                <img
-                  src={student.profile_photo_signed_url}
-                  alt={student.name}
-                  className="h-14 w-14 rounded-xl object-cover border border-blue-400"
-                />
-              ) : (
-                <div className="h-14 w-14 rounded-xl bg-blue-900 flex items-center justify-center text-lg font-bold">
-                  {student.name.charAt(0)}
+        {currentStep === 2 && (student || isDirectReturnMode) && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto w-full space-y-5 shadow-2xl">
+            {/* Context Badge Card: Student Verified OR Direct Return */}
+            {student ? (
+              <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center gap-4">
+                {student.profile_photo_signed_url ? (
+                  <img
+                    src={student.profile_photo_signed_url}
+                    alt={student.name}
+                    className="h-14 w-14 rounded-xl object-cover border border-blue-400"
+                  />
+                ) : (
+                  <div className="h-14 w-14 rounded-xl bg-blue-900 flex items-center justify-center text-lg font-bold">
+                    {student.name.charAt(0)}
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
+                      Ketua Terverifikasi
+                    </span>
+                    <span className="text-[11px] font-mono text-slate-400">Metode: {student.identification_method}</span>
+                  </div>
+                  <h3 className="text-base font-bold text-white truncate mt-0.5">{student.name}</h3>
+                  <p className="text-xs text-slate-400 font-mono">
+                    NIM: {student.nim} • {student.class_name}
+                  </p>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <div className="flex items-center gap-2">
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
-                    Ketua Terverifikasi
-                  </span>
-                  <span className="text-[11px] font-mono text-slate-400">Metode: {student.identification_method}</span>
-                </div>
-                <h3 className="text-base font-bold text-white truncate mt-0.5">{student.name}</h3>
-                <p className="text-xs text-slate-400 font-mono">
-                  NIM: {student.nim} • {student.class_name}
-                </p>
               </div>
-            </div>
+            ) : (
+              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                <div>
+                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                    Mode Pengembalian Langsung (Perwakilan)
+                  </span>
+                  <p className="text-xs text-amber-100 mt-1.5 leading-relaxed">
+                    QR Pass mahasiswa dilewati. Pindai kode QR unit proyektor yang berstatus <strong>BORROWED</strong>.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={scanningLoading || isCameraTransitioning}
+                  onClick={() => void resetKiosk()}
+                  className="shrink-0 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                >
+                  Kembali ke Pindai QR Pass
+                </button>
+              </div>
+            )}
 
             <div className="text-center space-y-1">
               <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
@@ -569,30 +747,44 @@ export default function KioskPage() {
               </span>
               <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Unit Proyektor</h2>
               <p className="text-sm text-slate-400">
-                Pindai stiker kode QR pada fisik unit proyektor (misal: PROJ-001).
+                Pindai stiker kode QR pada fisik unit proyektor (misal: PROJ-001) lewat kamera webcam atau input teks.
               </p>
             </div>
 
-            <div className="space-y-3">
+            {/* Webcam QR Scanner untuk Unit Proyektor */}
+            <QrScannerBox
+              key="kiosk-step2-projector-scanner"
+              mode="PROJECTOR_QR"
+              active={currentStep === 2 && !isCameraTransitioning}
+              scannerRef={qrScannerRef}
+              onScan={(code) => void handleProjectorScan(code)}
+            />
+
+            {/* Input Manual / USB Barcode Scanner Fallback */}
+            <div className="space-y-3 pt-2 border-t border-slate-800/80">
+              <label htmlFor="kiosk-projector-code-input" className="block text-[11px] font-semibold text-slate-400">
+                Input Manual / Scanner Barcode USB:
+              </label>
               <input
+                id="kiosk-projector-code-input"
                 type="text"
                 autoFocus
                 value={scannerInput}
                 onChange={(e) => setScannerInput(e.target.value)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' && scannerInput.trim()) {
-                    handleProjectorScan(scannerInput.trim());
+                    void handleProjectorScan(scannerInput.trim());
                   }
                 }}
                 placeholder="Ketik atau scan kode proyektor (mis. PROJ-001) lalu Enter..."
                 className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 uppercase font-mono tracking-wider"
-                disabled={scanningLoading}
+                disabled={scanningLoading || isCameraTransitioning}
               />
 
               <button
                 type="button"
-                disabled={scanningLoading || !scannerInput.trim()}
-                onClick={() => handleProjectorScan(scannerInput.trim())}
+                disabled={scanningLoading || isCameraTransitioning || !scannerInput.trim()}
+                onClick={() => void handleProjectorScan(scannerInput.trim())}
                 className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
               >
                 {scanningLoading ? 'Mengecek Status Unit...' : 'Periksa Proyektor'}
@@ -634,7 +826,7 @@ export default function KioskPage() {
                       Peminjam: <strong className="text-white">{projector.active_loan.student_name}</strong>
                     </p>
                     <p className="font-mono text-[11px] text-slate-400">
-                      Batas Waktu: {new Date(projector.active_loan.due_at).toLocaleTimeString('id-ID')} WIB
+                      Batas Waktu: {formatKioskDueAt(projector.active_loan.due_at)}
                     </p>
                     {projector.active_loan.is_overdue && (
                       <span className="inline-block mt-1 px-2 py-0.5 rounded bg-red-600 text-white text-[10px] font-bold">
@@ -667,13 +859,31 @@ export default function KioskPage() {
 
               {/* Returner Form for Return Flow */}
               {!isBorrow && (
-                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2">
+                <div className="p-4 rounded-2xl bg-slate-950 border border-slate-800 space-y-2.5">
                   <label className="block text-xs font-semibold text-slate-300">Pengembali Unit:</label>
+
+                  {returnerMismatchWarning && (
+                    <div className="p-2.5 rounded-xl bg-amber-950/60 border border-amber-500/50 text-[11px] text-amber-200 leading-relaxed space-y-1">
+                      <p className="font-bold text-amber-300">⚠️ Pemindai Berbeda dari Peminjam Aktif</p>
+                      <p>{returnerMismatchWarning}</p>
+                      {student && projector.active_loan && (
+                        <p className="font-mono text-[10px] text-amber-100/90">
+                          Peminjam aktif: {projector.active_loan.student_name} ({projector.active_loan.student_nim}) •
+                          Dipindai: {student.name} ({student.nim})
+                        </p>
+                      )}
+                    </div>
+                  )}
+
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      onClick={() => setReturnerType('BORROWER')}
-                      className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
+                      disabled={isDirectReturnMode}
+                      onClick={() => {
+                        setReturnerType('BORROWER');
+                        setRepresentativeConfirmed(false);
+                      }}
+                      className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         returnerType === 'BORROWER'
                           ? 'bg-blue-600 text-white'
                           : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -683,7 +893,10 @@ export default function KioskPage() {
                     </button>
                     <button
                       type="button"
-                      onClick={() => setReturnerType('REPRESENTATIVE')}
+                      onClick={() => {
+                        setReturnerType('REPRESENTATIVE');
+                        setRepresentativeConfirmed(false);
+                      }}
                       className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
                         returnerType === 'REPRESENTATIVE'
                           ? 'bg-blue-600 text-white'
@@ -694,8 +907,14 @@ export default function KioskPage() {
                     </button>
                   </div>
 
+                  {isDirectReturnMode && (
+                    <p className="text-[11px] text-amber-300/90">
+                      Jalur Pengembalian Langsung tanpa QR Pass mewajibkan pencatatan identitas Perwakilan.
+                    </p>
+                  )}
+
                   {returnerType === 'REPRESENTATIVE' && (
-                    <div className="pt-1">
+                    <div className="pt-1 space-y-2">
                       <input
                         type="text"
                         value={representativeName}
@@ -703,6 +922,17 @@ export default function KioskPage() {
                         placeholder="Ketik nama lengkap perwakilan..."
                         className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
                       />
+                      <label className="flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer select-none">
+                        <input
+                          type="checkbox"
+                          checked={representativeConfirmed}
+                          onChange={(e) => setRepresentativeConfirmed(e.target.checked)}
+                          className="mt-0.5 rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                        />
+                        <span>
+                          Petugas telah memeriksa identitas pengembali dan mengonfirmasi nama perwakilan di atas.
+                        </span>
+                      </label>
                     </div>
                   )}
                 </div>
@@ -772,8 +1002,8 @@ export default function KioskPage() {
                   {/* Normal Button */}
                   <button
                     type="button"
-                    disabled={isSubmitting || (returnerType === 'REPRESENTATIVE' && !representativeName.trim())}
-                    onClick={() => handleFinalTransaction('NORMAL')}
+                    disabled={!canConfirmTransaction}
+                    onClick={() => void handleFinalTransaction('NORMAL')}
                     className="p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-left font-bold text-base shadow-xl shadow-emerald-900/30 border border-emerald-400/40 transition-all disabled:opacity-50 flex flex-col justify-between"
                   >
                     <div>
@@ -795,7 +1025,7 @@ export default function KioskPage() {
                   {/* Report Issue Button */}
                   <button
                     type="button"
-                    disabled={isSubmitting || (returnerType === 'REPRESENTATIVE' && !representativeName.trim())}
+                    disabled={!canConfirmTransaction}
                     onClick={() => setShowIssueModal(true)}
                     className="p-5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-left font-bold text-base shadow-xl shadow-amber-900/30 border border-amber-400/40 transition-all disabled:opacity-50 flex flex-col justify-between"
                   >
@@ -847,7 +1077,7 @@ export default function KioskPage() {
 
             <button
               type="button"
-              onClick={resetKiosk}
+              onClick={() => void resetKiosk()}
               className="w-full py-3.5 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl shadow-lg shadow-blue-500/20 transition-all"
             >
               Selesai & Sesi Baru
@@ -856,12 +1086,12 @@ export default function KioskPage() {
         )}
       </div>
 
-      {/* Manual Lookup Modal (FR-08) */}
+      {/* Manual Lookup Modal (FR-16) */}
       {showManualModal && (
         <div className="fixed inset-0 z-50 bg-black/70 backdrop-blur-sm flex items-center justify-center p-4">
           <div className="bg-slate-900 border border-slate-800 rounded-3xl max-w-lg w-full p-6 shadow-2xl space-y-4">
             <div className="flex justify-between items-center border-b border-slate-800 pb-3">
-              <h3 className="text-base font-bold text-white">Pencarian Manual Ketua Kelas (FR-08)</h3>
+              <h3 className="text-base font-bold text-white">Pencarian Manual Ketua Kelas (FR-16)</h3>
               <button onClick={() => setShowManualModal(false)} className="text-slate-400 hover:text-white">
                 ✕
               </button>
