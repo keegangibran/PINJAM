@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 import { formatWib } from '@/lib/timezone';
@@ -43,7 +43,9 @@ interface StatusLog {
 export default function AdminProjectorsPage() {
   const [projectors, setProjectors] = useState<ProjectorItem[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const isFetchingRef = useRef(false);
 
   // Modal Add
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
@@ -76,11 +78,20 @@ export default function AdminProjectorsPage() {
   // Modal QR Asset Sticker Print
   const [qrPrintProjector, setQrPrintProjector] = useState<ProjectorItem | null>(null);
 
-  const fetchProjectors = useCallback(async () => {
-    setLoading(true);
+  const fetchProjectors = useCallback(async (options?: { silent?: boolean }) => {
+    if (isFetchingRef.current) return;
+    isFetchingRef.current = true;
+    if (options?.silent) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+      setIsRefreshing(true);
+    }
     setError(null);
     try {
-      const res = await fetch('/api/admin/projectors');
+      const res = await fetch('/api/admin/projectors', {
+        cache: 'no-store',
+      });
       const data = await res.json();
       if (!res.ok) {
         setError(data.error?.message || 'Gagal memuat inventaris proyektor.');
@@ -91,12 +102,32 @@ export default function AdminProjectorsPage() {
       setError('Gangguan jaringan saat menghubungi server.');
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
+      isFetchingRef.current = false;
     }
   }, []);
 
-  useEffect(() => {
-    fetchProjectors();
+  const refreshProjectors = useCallback(async () => {
+    await fetchProjectors({ silent: true });
   }, [fetchProjectors]);
+
+  useEffect(() => {
+    void fetchProjectors();
+
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isFetchingRef.current) {
+        void refreshProjectors();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [fetchProjectors, refreshProjectors]);
 
   // Handler Add Projector
   const handleAddSubmit = async (e: React.FormEvent) => {
@@ -248,6 +279,28 @@ export default function AdminProjectorsPage() {
             >
               ← Kembali ke Dashboard
             </Link>
+            <button
+              type="button"
+              onClick={() => void refreshProjectors()}
+              disabled={loading || isRefreshing}
+              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+              title="Perbarui data inventaris terbaru dari server"
+            >
+              <svg
+                className={`w-3.5 h-3.5 text-slate-500 ${loading || isRefreshing ? 'animate-spin text-blue-600' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span>{loading || isRefreshing ? 'Memuat...' : 'Muat Ulang'}</span>
+            </button>
             <button
               onClick={() => {
                 setAddForm({ code: '', name: '', notes: '' });

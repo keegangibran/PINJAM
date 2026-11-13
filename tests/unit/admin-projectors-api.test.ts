@@ -69,9 +69,13 @@ describe('Admin Projector Asset & Maintenance API Unit Tests', () => {
         },
       ];
 
+      const mockOrder = vi.fn().mockResolvedValue({ data: sampleProjectors, error: null });
+      const mockEq = vi.fn().mockReturnValue({ order: mockOrder });
+
       mockAdminFrom.mockReturnValueOnce({
         select: vi.fn().mockReturnValue({
-          order: vi.fn().mockResolvedValue({ data: sampleProjectors, error: null }),
+          eq: mockEq,
+          order: mockOrder,
         }),
       });
 
@@ -79,6 +83,8 @@ describe('Admin Projector Asset & Maintenance API Unit Tests', () => {
       const data = await res.json();
 
       expect(res.status).toBe(200);
+      expect(mockEq).toHaveBeenCalledWith('loans.status', 'ACTIVE');
+      expect(res.headers.get('cache-control')).toBe('no-store, no-cache, must-revalidate');
       expect(data.success).toBe(true);
       expect(data.projectors).toHaveLength(1);
       expect(data.projectors[0].code).toBe('PROJ-01');

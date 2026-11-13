@@ -1,7 +1,7 @@
 /* eslint-disable @next/next/no-img-element */
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
@@ -224,6 +224,10 @@ export default function AdminDashboardPage() {
   const [maintenanceRunning, setMaintenanceRunning] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
 
+  // Refresh state & concurrency guard
+  const isRefreshingRef = useRef(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
   // Photo modal state
   const [selectedLoanForPhotos, setSelectedLoanForPhotos] = useState<LoanRecord | null>(null);
   const [photoUrls, setPhotoUrls] = useState<{
@@ -264,8 +268,10 @@ export default function AdminDashboardPage() {
     }
   };
 
-  const fetchLoans = useCallback(async () => {
-    setLoading(true);
+  const fetchLoans = useCallback(async (options?: { silent?: boolean }) => {
+    if (!options?.silent) {
+      setLoading(true);
+    }
     setError(null);
     try {
       const params = new URLSearchParams();
@@ -282,7 +288,9 @@ export default function AdminDashboardPage() {
         params.set('q', searchQuery.trim());
       }
 
-      const res = await fetch(`/api/admin/loans?${params.toString()}`);
+      const res = await fetch(`/api/admin/loans?${params.toString()}`, {
+        cache: 'no-store',
+      });
       const data = await res.json();
 
       if (!res.ok) {
@@ -306,7 +314,9 @@ export default function AdminDashboardPage() {
 
   const fetchMaintenanceStatus = useCallback(async () => {
     try {
-      const res = await fetch('/api/admin/maintenance/status');
+      const res = await fetch('/api/admin/maintenance/status', {
+        cache: 'no-store',
+      });
       const json = await res.json();
       if (res.ok && json.data) {
         setMaintenanceData(json.data);
@@ -316,10 +326,41 @@ export default function AdminDashboardPage() {
     }
   }, []);
 
-  useEffect(() => {
-    fetchLoans();
-    fetchMaintenanceStatus();
+  const refreshDashboard = useCallback(async () => {
+    if (isRefreshingRef.current) return;
+    isRefreshingRef.current = true;
+    setIsRefreshing(true);
+    try {
+      await Promise.all([
+        fetchLoans({ silent: true }),
+        fetchMaintenanceStatus(),
+      ]);
+    } finally {
+      setIsRefreshing(false);
+      isRefreshingRef.current = false;
+    }
   }, [fetchLoans, fetchMaintenanceStatus]);
+
+  useEffect(() => {
+    void fetchLoans();
+    void fetchMaintenanceStatus();
+  }, [fetchLoans, fetchMaintenanceStatus]);
+
+  useEffect(() => {
+    const handleVisibilityOrFocus = () => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'visible' && !isRefreshingRef.current) {
+        void refreshDashboard();
+      }
+    };
+
+    window.addEventListener('visibilitychange', handleVisibilityOrFocus);
+    window.addEventListener('focus', handleVisibilityOrFocus);
+
+    return () => {
+      window.removeEventListener('visibilitychange', handleVisibilityOrFocus);
+      window.removeEventListener('focus', handleVisibilityOrFocus);
+    };
+  }, [refreshDashboard]);
 
   // Request signed URL saat membuka modal foto
   const openPhotoModal = async (loan: LoanRecord) => {
@@ -439,6 +480,28 @@ export default function AdminDashboardPage() {
             >
               Inventaris Proyektor
             </Link>
+            <button
+              type="button"
+              onClick={() => void refreshDashboard()}
+              disabled={loading || isRefreshing}
+              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
+              title="Perbarui data buku besar dan ringkasan inventaris terbaru dari server"
+            >
+              <svg
+                className={`w-3.5 h-3.5 text-slate-500 ${loading || isRefreshing ? 'animate-spin text-blue-600' : ''}`}
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
+                />
+              </svg>
+              <span>{loading || isRefreshing ? 'Memuat...' : 'Muat Ulang'}</span>
+            </button>
             <button
               onClick={() => setIsExportModalOpen(true)}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5"

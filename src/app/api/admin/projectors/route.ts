@@ -18,6 +18,8 @@ const createProjectorSchema = z.object({
   notes: z.string().optional().nullable(),
 });
 
+const CACHE_CONTROL_HEADER = 'no-store, no-cache, must-revalidate';
+
 export async function GET() {
   try {
     await requireStaff();
@@ -45,12 +47,19 @@ export async function GET() {
           )
         )
       `)
+      .eq('loans.status', 'ACTIVE')
       .order('code', { ascending: true });
 
     if (error) {
       return NextResponse.json(
         { error: { code: 'FETCH_PROJECTORS_FAILED', message: error.message } },
-        { status: 500 }
+        {
+          status: 500,
+          headers: {
+            'Cache-Control': CACHE_CONTROL_HEADER,
+            Pragma: 'no-cache',
+          },
+        }
       );
     }
 
@@ -80,16 +89,30 @@ export async function GET() {
       };
     });
 
-    return NextResponse.json({
-      success: true,
-      projectors,
-    });
+    return NextResponse.json(
+      {
+        success: true,
+        projectors,
+      },
+      {
+        headers: {
+          'Cache-Control': CACHE_CONTROL_HEADER,
+          Pragma: 'no-cache',
+        },
+      }
+    );
   } catch (err: unknown) {
     const message = err instanceof Error ? err.message : 'Internal server error';
     const statusCode = (err as { statusCode?: number }).statusCode || 500;
     return NextResponse.json(
       { error: { code: 'UNAUTHORIZED_OR_ERROR', message } },
-      { status: statusCode }
+      {
+        status: statusCode,
+        headers: {
+          'Cache-Control': CACHE_CONTROL_HEADER,
+          Pragma: 'no-cache',
+        },
+      }
     );
   }
 }

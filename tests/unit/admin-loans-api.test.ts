@@ -118,6 +118,7 @@ describe('Admin Loans Ledger API (GET /api/admin/loans)', () => {
     const data = await res.json();
 
     expect(res.status).toBe(200);
+    expect(res.headers.get('cache-control')).toBe('no-store, no-cache, must-revalidate');
     expect(data.success).toBe(true);
     expect(data.summary).toEqual({
       total_projectors: 10,
