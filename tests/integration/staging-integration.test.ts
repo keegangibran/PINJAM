@@ -1,5 +1,8 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { describe, it, expect, beforeAll, vi } from 'vitest';
 import { generateQrPassToken, verifyQrPassToken } from '@/lib/qr-token';
+
+// Mock server-only for test runner environment
+vi.mock('server-only', () => ({}));
 
 const hasStagingCredentials = Boolean(
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
