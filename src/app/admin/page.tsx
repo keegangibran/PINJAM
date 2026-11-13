@@ -456,12 +456,12 @@ export default function AdminDashboardPage() {
               </span>
               <h1 className="text-2xl font-bold text-slate-900">Dashboard Buku Besar Digital</h1>
             </div>
-            <p className="text-sm text-slate-500 mt-1">
+            <p className="text-sm text-slate-500 mt-1 max-w-md">
               Pemantauan status proyektor real-time, pelacakan keterlambatan, dan riwayat transaksi.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap items-center justify-end gap-2">
             <Link
               href="/admin/verifications"
               className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
@@ -503,6 +503,7 @@ export default function AdminDashboardPage() {
               <span>{loading || isRefreshing ? 'Memuat...' : 'Muat Ulang'}</span>
             </button>
             <button
+              type="button"
               onClick={() => setIsExportModalOpen(true)}
               className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5"
             >
@@ -512,6 +513,7 @@ export default function AdminDashboardPage() {
               Ekspor Data
             </button>
             <button
+              type="button"
               onClick={handleLogout}
               disabled={loggingOut}
               className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
