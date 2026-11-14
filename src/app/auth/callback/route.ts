@@ -1,11 +1,12 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getSafeNextPath } from '@/lib/auth/redirect';
 import { NextResponse, type NextRequest } from 'next/server';
 
 export async function GET(request: NextRequest) {
   const requestUrl = new URL(request.url);
   const code = requestUrl.searchParams.get('code');
-  const next = requestUrl.searchParams.get('next') ?? '/login';
+  const safeNext = getSafeNextPath(requestUrl.searchParams.get('next'), requestUrl);
 
   if (code) {
     const supabase = await createServerSupabaseClient();
@@ -38,6 +39,6 @@ export async function GET(request: NextRequest) {
     }
   }
 
-  return NextResponse.redirect(new URL(next, request.url));
+  return NextResponse.redirect(new URL(safeNext, request.url));
 }
 
