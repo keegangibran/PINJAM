@@ -13,6 +13,7 @@ function LoginForm() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isRedirecting, setIsRedirecting] = useState(false);
   const [error, setError] = useState<string | null>(urlError);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -35,12 +36,13 @@ function LoginForm() {
         return;
       }
 
+      setIsRedirecting(true);
       const destination = returnUrl || data.redirectTo || '/';
       router.push(destination);
-      router.refresh();
     } catch {
       setError('Terjadi gangguan jaringan saat menghubungi server.');
       setLoading(false);
+      setIsRedirecting(false);
     }
   };
 
@@ -64,6 +66,13 @@ function LoginForm() {
         </div>
       )}
 
+      {isRedirecting && (
+        <div className="mt-6 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800 flex items-center gap-2.5">
+          <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-emerald-600 border-t-transparent shrink-0"></span>
+          <span>Autentikasi berhasil. Mengalihkan ke dasbor...</span>
+        </div>
+      )}
+
       <form onSubmit={handleSubmit} className="mt-6 space-y-4">
         <div>
           <label className="block text-xs font-semibold text-slate-700 mb-1">
@@ -76,7 +85,7 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
             placeholder="nama@unimed.ac.id atau gmail.com"
             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            disabled={loading}
+            disabled={loading || isRedirecting}
           />
         </div>
 
@@ -91,16 +100,28 @@ function LoginForm() {
             onChange={(e) => setPassword(e.target.value)}
             placeholder="••••••••"
             className="w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-            disabled={loading}
+            disabled={loading || isRedirecting}
           />
         </div>
 
         <button
           type="submit"
-          disabled={loading}
-          className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50"
+          disabled={loading || isRedirecting}
+          className="w-full rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-blue-700 disabled:opacity-50 flex items-center justify-center gap-2"
         >
-          {loading ? 'Memproses Masuk...' : 'Masuk Akun'}
+          {isRedirecting ? (
+            <>
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+              <span>Mengalihkan...</span>
+            </>
+          ) : loading ? (
+            <>
+              <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+              <span>Memproses Masuk...</span>
+            </>
+          ) : (
+            'Masuk Akun'
+          )}
         </button>
       </form>
 
