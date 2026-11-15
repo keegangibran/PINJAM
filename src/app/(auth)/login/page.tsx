@@ -1,11 +1,11 @@
 'use client';
 
 import { useState, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
+import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
+import { getSafeRedirectDestination } from '@/lib/auth/redirect';
 
 function LoginForm() {
-  const router = useRouter();
   const searchParams = useSearchParams();
   const returnUrl = searchParams.get('returnUrl');
   const urlError = searchParams.get('error');
@@ -37,8 +37,9 @@ function LoginForm() {
       }
 
       setIsRedirecting(true);
-      const destination = returnUrl || data.redirectTo || '/';
-      router.push(destination);
+      const baseOrigin = typeof window !== 'undefined' ? window.location.origin : 'http://localhost:3000';
+      const destination = getSafeRedirectDestination(returnUrl, data.redirectTo, baseOrigin, '/');
+      window.location.replace(destination);
     } catch {
       setError('Terjadi gangguan jaringan saat menghubungi server.');
       setLoading(false);

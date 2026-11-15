@@ -3,6 +3,7 @@ import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 import AdminLoading from '@/app/admin/loading';
 import StudentQrLoading from '@/app/(student)/my-qr/loading';
+import { getSafeRedirectDestination } from '@/lib/auth/redirect';
 
 describe('Login & Dashboard Loading UX Improvements', () => {
   describe('AdminLoading Component', () => {
@@ -64,6 +65,78 @@ describe('Login & Dashboard Loading UX Improvements', () => {
       const html = renderToStaticMarkup(React.createElement(StudentQrLoading));
       expect(html).toContain('animate-ping');
       expect(html).toContain('animate-pulse');
+    });
+  });
+
+  describe('Safe Login Redirect Destination Logic', () => {
+    const baseOrigin = 'https://pinjam.example.com';
+
+    it('prioritizes valid returnUrl when navigating to /my-qr', () => {
+      const dest = getSafeRedirectDestination('/my-qr', '/admin', baseOrigin);
+      expect(dest).toBe('/my-qr');
+    });
+
+    it('redirects Admin to /admin when returnUrl is not provided', () => {
+      const dest = getSafeRedirectDestination(null, '/admin', baseOrigin);
+      expect(dest).toBe('/admin');
+    });
+
+    it('rejects external URLs in returnUrl and safely falls back to apiRedirectTo', () => {
+      const dest = getSafeRedirectDestination('https://evil.com/hack', '/my-qr', baseOrigin);
+      expect(dest).toBe('/my-qr');
+    });
+
+    it('rejects protocol-relative URLs (//) in returnUrl and falls back to safe path', () => {
+      const dest = getSafeRedirectDestination('//evil.com/phishing', '/admin', baseOrigin);
+      expect(dest).toBe('/admin');
+    });
+
+    it('rejects backslash evasion in returnUrl and falls back to safe path', () => {
+      const dest = getSafeRedirectDestination('/\\evil.com', '/admin', baseOrigin);
+      expect(dest).toBe('/admin');
+    });
+
+    it('preserves query parameters and hash on valid internal returnUrl', () => {
+      const dest = getSafeRedirectDestination(
+        '/admin/projectors?status=AVAILABLE#top',
+        '/admin',
+        baseOrigin
+      );
+      expect(dest).toBe('/admin/projectors?status=AVAILABLE#top');
+    });
+
+    it('safely falls back to default "/" when both returnUrl and apiRedirectTo are missing or invalid', () => {
+      const dest = getSafeRedirectDestination(null, null, baseOrigin, '/');
+      expect(dest).toBe('/');
+
+      const destInvalid = getSafeRedirectDestination('https://evil.com', 'https://attacker.com', baseOrigin, '/');
+      expect(destInvalid).toBe('/');
+    });
+
+    it('rejects returnUrl pointing exactly to /login and falls back to apiRedirectTo', () => {
+      const dest = getSafeRedirectDestination('/login', '/my-qr', baseOrigin);
+      expect(dest).toBe('/my-qr');
+    });
+
+    it('rejects returnUrl pointing to /login with query parameters and falls back to apiRedirectTo', () => {
+      const dest = getSafeRedirectDestination(
+        '/login?error=SessionExpired&returnUrl=%2Fadmin',
+        '/admin',
+        baseOrigin
+      );
+      expect(dest).toBe('/admin');
+    });
+
+    it('considers returnUrl /login-history as a valid internal path and does not reject it', () => {
+      const dest = getSafeRedirectDestination('/login-history', '/my-qr', baseOrigin);
+      expect(dest).toBe('/login-history');
+
+      const destWithQuery = getSafeRedirectDestination(
+        '/login-history?tab=recent#top',
+        '/my-qr',
+        baseOrigin
+      );
+      expect(destWithQuery).toBe('/login-history?tab=recent#top');
     });
   });
 });
