@@ -14,6 +14,7 @@ import {
   DEFAULT_SCAN_COOLDOWN_MS,
   canAcceptScan,
   createInitialScanGuardState,
+  isLikelyJwsToken,
   mapCameraError,
   markScanFinished,
   markScanStarted,
@@ -194,6 +195,12 @@ export function createQrScannerController(options: QrScannerControllerOptions) {
   };
 
   const handleDecodedPayload = (rawText: string) => {
+    // Dual-Scan Guard: Abaikan token QR Pass mahasiswa yang mungkin masih berada di depan kamera
+    // saat baru berpindah dari Step 1 ke Step 2 (mode PROJECTOR_QR).
+    if (currentMode === 'PROJECTOR_QR' && isLikelyJwsToken(rawText)) {
+      return;
+    }
+
     const normalized =
       currentMode === 'STUDENT_QR'
         ? normalizeQrToken(rawText)
@@ -358,6 +365,9 @@ export function createQrScannerController(options: QrScannerControllerOptions) {
   const updateCallbacks = (nextMode: QrScannerMode, nextOnScan: QrScannerBoxProps['onScan']) => {
     if (currentMode !== nextMode) {
       scanGuard = createInitialScanGuardState();
+      if (activeInstance && snapshot.status === 'processing') {
+        emitSnapshot({ status: 'scanning' });
+      }
     }
     currentMode = nextMode;
     currentOnScan = nextOnScan;

@@ -88,12 +88,13 @@ export function formatKioskDueAt(dueAt: string): string {
 }
 
 /**
- * Mengeksekusi verifikasi QR Pass mahasiswa (FR-03) dan menghentikan scanner Step 1
- * secara sinkron/await sebelum transisi ke Step 2.
+ * Mengeksekusi verifikasi QR Pass mahasiswa (FR-03).
+ * Dalam mode Dual-Scan persisten, stopScanner bersifat opsional agar stream kamera
+ * tetap berjalan tanpa interupsi saat berpindah dari Step 1 ke Step 2.
  */
 export async function executeStudentQrScan(params: {
   token: string;
-  stopScanner: () => Promise<void>;
+  stopScanner?: () => Promise<void>;
   fetchImpl?: typeof fetch;
 }): Promise<StudentSessionSuccess | KioskWorkflowFailure> {
   const normalizedToken = normalizeQrToken(params.token);
@@ -125,7 +126,9 @@ export async function executeStudentQrScan(params: {
       };
     }
 
-    await params.stopScanner();
+    if (params.stopScanner) {
+      await params.stopScanner();
+    }
 
     return {
       ok: true,
@@ -142,13 +145,13 @@ export async function executeStudentQrScan(params: {
 }
 
 /**
- * Mengeksekusi sesi pencarian manual ketua kelas (FR-16) dan menghentikan scanner Step 1
- * sebelum berpindah ke Step 2.
+ * Mengeksekusi sesi pencarian manual ketua kelas (FR-16).
+ * stopScanner bersifat opsional saat beralih ke Step 2.
  */
 export async function executeManualLookupSession(params: {
   studentId: string | null;
   reason: string;
-  stopScanner: () => Promise<void>;
+  stopScanner?: () => Promise<void>;
   fetchImpl?: typeof fetch;
 }): Promise<StudentSessionSuccess | KioskWorkflowFailure> {
   if (!params.studentId) {
@@ -190,7 +193,9 @@ export async function executeManualLookupSession(params: {
       };
     }
 
-    await params.stopScanner();
+    if (params.stopScanner) {
+      await params.stopScanner();
+    }
 
     return {
       ok: true,
@@ -207,17 +212,19 @@ export async function executeManualLookupSession(params: {
 }
 
 /**
- * Memasuki jalur Pengembalian Langsung oleh Perwakilan (FR-07) dari Step 1 -> Step 2
- * dengan memastikan scanner Step 1 berhenti terlebih dahulu.
+ * Memasuki jalur Pengembalian Langsung oleh Perwakilan (FR-07) dari Step 1 -> Step 2.
+ * Dalam mode Dual-Scan persisten, stopScanner bersifat opsional agar stream kamera tetap aktif.
  */
-export async function executeDirectReturnTransition(params: {
-  stopScanner: () => Promise<void>;
+export async function executeDirectReturnTransition(params?: {
+  stopScanner?: () => Promise<void>;
 }): Promise<{
   nextStep: 2;
   isDirectReturnMode: true;
   defaultReturnerType: 'REPRESENTATIVE';
 }> {
-  await params.stopScanner();
+  if (params?.stopScanner) {
+    await params.stopScanner();
+  }
   return {
     nextStep: 2,
     isDirectReturnMode: true,

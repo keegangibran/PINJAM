@@ -541,6 +541,64 @@ describe('QrScannerBox & Controller Unit Tests (src/components/kiosk/QrScannerBo
     expect(snapshots.some((s) => s.status === 'processing')).toBe(true);
   });
 
+  it('seamlessly transitions from STUDENT_QR to PROJECTOR_QR without restarting camera and guards against lingering JWS token', async () => {
+    const mock = createMockAdapter();
+    const studentScanDeferred = createDeferred<void>();
+    const onScanStudent = vi.fn<(token: string) => Promise<void>>().mockImplementation(() => studentScanDeferred.promise);
+    const onScanProjector = vi.fn<(code: string) => Promise<void>>().mockResolvedValue(undefined);
+
+    const controller = createQrScannerController({
+      elementId: 'scanner-el',
+      mode: 'STUDENT_QR',
+      adapter: mock.adapter,
+      onScan: onScanStudent,
+    });
+
+    await controller.start();
+    expect(controller.getSnapshot().status).toBe('scanning');
+    expect(mock.spies.start).toHaveBeenCalledTimes(1);
+
+    // 1. Scan QR Pass mahasiswa pada Step 1
+    const studentJwsToken = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0.dozG42AIAX10N8vW_MYb52fF-e-w_sP4-L1x3_gK7_o';
+    mock.triggerDecode(`  ${studentJwsToken}  `);
+    expect(onScanStudent).toHaveBeenCalledTimes(1);
+    expect(onScanStudent).toHaveBeenCalledWith(studentJwsToken);
+    expect(controller.getSnapshot().status).toBe('processing');
+
+    // Selesaikan scan Step 1
+    studentScanDeferred.resolve();
+    await Promise.resolve();
+
+    // 2. Berpindah ke Step 2 (mode PROJECTOR_QR) secara dinamis tanpa menghentikan kamera
+    controller.updateCallbacks('PROJECTOR_QR', onScanProjector);
+
+    // Pastikan instance kamera TIDAK dihentikan dan TIDAK di-restart
+    expect(mock.spies.stop).not.toHaveBeenCalled();
+    expect(mock.spies.clear).not.toHaveBeenCalled();
+    expect(mock.spies.start).toHaveBeenCalledTimes(1); // Tetap 1 kali saat inisialisasi awal
+    expect(controller.getSnapshot().status).toBe('scanning');
+
+    // 3. Frame kamera masih menangkap QR Pass mahasiswa yang belum sempat ditarik
+    mock.triggerDecode(studentJwsToken);
+    // Token JWS harus diabaikan di mode PROJECTOR_QR agar tidak memicu error palsu
+    expect(onScanProjector).not.toHaveBeenCalled();
+    expect(controller.getSnapshot().status).toBe('scanning');
+
+    // 4. Stiker unit proyektor diarahkan ke kamera
+    mock.triggerDecode('  proj-001\r\n');
+    expect(onScanProjector).toHaveBeenCalledTimes(1);
+    expect(onScanProjector).toHaveBeenCalledWith('PROJ-001');
+
+    await Promise.resolve();
+    expect(controller.getSnapshot().status).toBe('scanning');
+
+    // 5. Ketika transisi ke Step 3, scanner dihentikan tuntas
+    await controller.stop();
+    expect(mock.spies.stop).toHaveBeenCalledTimes(1);
+    expect(mock.spies.clear).toHaveBeenCalledTimes(1);
+    expect(controller.getSnapshot().status).toBe('stopped');
+  });
+
   it('renders safely on SSR without window/navigator and without manual text inputs', () => {
     delete (globalThis as { window?: unknown }).window;
     delete (globalThis as { navigator?: unknown }).navigator;

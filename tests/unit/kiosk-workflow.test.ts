@@ -108,6 +108,30 @@ describe('Kiosk Integration & Workflow Tests (src/lib/kiosk-workflow.ts & src/ap
       ]);
     });
 
+    it('transitions to Step 2 without stopping scanner when stopScanner is omitted (Dual-Scan continuous stream)', async () => {
+      const fetchMock = vi.fn<typeof fetch>(async () =>
+        createJsonResponse(200, {
+          success: true,
+          data: {
+            kiosk_session_id: 'sess-dual-scan-1',
+            student: MOCK_STUDENT_A,
+          },
+        })
+      );
+
+      const result = await executeStudentQrScan({
+        token: 'eyJhbGciOiJIUzI1NiJ9.dual.token',
+        fetchImpl: fetchMock,
+      });
+
+      expect(result).toEqual({
+        ok: true,
+        kioskSessionId: 'sess-dual-scan-1',
+        student: MOCK_STUDENT_A,
+        nextStep: 2,
+      });
+    });
+
     it('keeps Step 1 scanner active on invalid/expired QR Pass without leaking token in error message', async () => {
       const secretToken = 'eyJhbGciOiJIUzI1NiJ9.SECRET_PAYLOAD.SIG';
       const stopScanner = vi.fn(async () => undefined);
@@ -168,6 +192,13 @@ describe('Kiosk Integration & Workflow Tests (src/lib/kiosk-workflow.ts & src/ap
         expect(valid.student.identification_method).toBe('MANUAL_LOOKUP');
       }
       expect(stopScanner).toHaveBeenCalledTimes(1);
+
+      const validWithoutStop = await executeManualLookupSession({
+        studentId: MOCK_STUDENT_A.id,
+        reason: 'HP ketua kelas habis baterai',
+        fetchImpl: fetchMock,
+      });
+      expect(validWithoutStop.ok).toBe(true);
     });
   });
 
@@ -416,6 +447,13 @@ describe('Kiosk Integration & Workflow Tests (src/lib/kiosk-workflow.ts & src/ap
       const transition = await executeDirectReturnTransition({ stopScanner });
       expect(stopScanner).toHaveBeenCalledTimes(1);
       expect(transition).toEqual({
+        nextStep: 2,
+        isDirectReturnMode: true,
+        defaultReturnerType: 'REPRESENTATIVE',
+      });
+
+      const transitionContinuous = await executeDirectReturnTransition();
+      expect(transitionContinuous).toEqual({
         nextStep: 2,
         isDirectReturnMode: true,
         defaultReturnerType: 'REPRESENTATIVE',

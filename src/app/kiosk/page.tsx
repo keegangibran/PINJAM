@@ -235,9 +235,7 @@ export default function KioskPage() {
     setScanningLoading(true);
     setErrorMessage(null);
     try {
-      const transition = await executeDirectReturnTransition({
-        stopScanner: stopQrScannerSafely,
-      });
+      const transition = await executeDirectReturnTransition();
       setKioskSessionId(null);
       setStudent(null);
       setProjector(null);
@@ -249,7 +247,6 @@ export default function KioskPage() {
       setReturnerMismatchWarning(null);
       setCurrentStep(transition.nextStep);
     } finally {
-      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
@@ -262,7 +259,6 @@ export default function KioskPage() {
     try {
       const result = await executeStudentQrScan({
         token,
-        stopScanner: stopQrScannerSafely,
       });
 
       if (!result.ok) {
@@ -278,7 +274,6 @@ export default function KioskPage() {
       setScannerInput('');
       setCurrentStep(result.nextStep);
     } finally {
-      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
@@ -292,7 +287,6 @@ export default function KioskPage() {
       const result = await executeManualLookupSession({
         studentId: selectedStudentId,
         reason: manualReason,
-        stopScanner: stopQrScannerSafely,
       });
 
       if (!result.ok) {
@@ -309,7 +303,6 @@ export default function KioskPage() {
       setScannerInput('');
       setCurrentStep(result.nextStep);
     } finally {
-      setIsCameraTransitioning(false);
       setScanningLoading(false);
     }
   };
@@ -600,196 +593,200 @@ export default function KioskPage() {
           </div>
         )}
 
-        {/* STEP 1: Scan Student QR or Manual Lookup / Direct Return */}
-        {currentStep === 1 && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto w-full text-center space-y-5 shadow-2xl">
-            <div className="space-y-1.5">
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
-                Langkah 1 dari 4
-              </span>
-              <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Pass Mahasiswa</h2>
-              <p className="text-sm text-slate-400">
-                Arahkan layar ponsel ketua kelas yang menampilkan QR Pass ke kamera webcam atau scanner USB TU.
-              </p>
-            </div>
+        {/* STEP 1 & 2: Dual-Scan Area (Shared Persistent Scanner) */}
+        {(currentStep === 1 || (currentStep === 2 && (student || isDirectReturnMode))) && (
+          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto w-full space-y-5 shadow-2xl">
+            {/* Step 2: Context Badge Card: Student Verified OR Direct Return */}
+            {currentStep === 2 && (
+              student ? (
+                <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center gap-4">
+                  {student.profile_photo_signed_url ? (
+                    <img
+                      src={student.profile_photo_signed_url}
+                      alt={student.name}
+                      className="h-14 w-14 rounded-xl object-cover border border-blue-400"
+                    />
+                  ) : (
+                    <div className="h-14 w-14 rounded-xl bg-blue-900 flex items-center justify-center text-lg font-bold">
+                      {student.name.charAt(0)}
+                    </div>
+                  )}
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center gap-2">
+                      <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
+                        Ketua Terverifikasi
+                      </span>
+                      <span className="text-[11px] font-mono text-slate-400">Metode: {student.identification_method}</span>
+                    </div>
+                    <h3 className="text-base font-bold text-white truncate mt-0.5">{student.name}</h3>
+                    <p className="text-xs text-slate-400 font-mono">
+                      NIM: {student.nim} • {student.class_name}
+                    </p>
+                  </div>
+                </div>
+              ) : (
+                <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                  <div>
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
+                      Mode Pengembalian Langsung (Perwakilan)
+                    </span>
+                    <p className="text-xs text-amber-100 mt-1.5 leading-relaxed">
+                      QR Pass mahasiswa dilewati. Pindai kode QR unit proyektor yang berstatus <strong>BORROWED</strong>.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    disabled={scanningLoading || isCameraTransitioning}
+                    onClick={() => void resetKiosk()}
+                    className="shrink-0 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
+                  >
+                    Kembali ke Pindai QR Pass
+                  </button>
+                </div>
+              )
+            )}
 
-            {/* Webcam QR Scanner (FR-03) */}
-            <QrScannerBox
-              key="kiosk-step1-student-scanner"
-              mode="STUDENT_QR"
-              active={currentStep === 1 && !showManualModal && !isCameraTransitioning}
-              scannerRef={qrScannerRef}
-              onScan={(token) => void handleStudentScan(token)}
-            />
-
-            {/* Jalur Pengembalian Langsung oleh Perwakilan (FR-07) */}
-            <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
-              <div>
-                <p className="text-xs font-bold text-amber-300">Pengembalian oleh Perwakilan (Tanpa QR Pass)</p>
-                <p className="text-[11px] text-amber-200/80">
-                  Pilih jalur ini jika unit dikembalikan oleh teman/perwakilan tanpa ketua kelas hadir.
+            {/* Step Header */}
+            {currentStep === 1 ? (
+              <div className="space-y-1.5 text-center">
+                <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
+                  Langkah 1 dari 4
+                </span>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Pass Mahasiswa</h2>
+                <p className="text-sm text-slate-400">
+                  Arahkan layar ponsel ketua kelas yang menampilkan QR Pass ke kamera webcam atau scanner USB TU.
                 </p>
               </div>
-              <button
-                type="button"
-                disabled={scanningLoading || isCameraTransitioning}
-                onClick={() => void handleEnterDirectReturn()}
-                className="w-full sm:w-auto shrink-0 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-50"
-              >
-                Pengembalian Langsung (Perwakilan)
-              </button>
-            </div>
+            ) : (
+              <div className="text-center space-y-1">
+                <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
+                  Langkah 2 dari 4
+                </span>
+                <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Unit Proyektor</h2>
+                <p className="text-sm text-slate-400">
+                  Pindai stiker kode QR pada fisik unit proyektor (misal: PROJ-001) lewat kamera webcam atau input teks.
+                </p>
+              </div>
+            )}
 
-            {/* Input Manual / USB Barcode Scanner Fallback */}
-            <div className="space-y-3 pt-2 border-t border-slate-800/80 text-left">
-              <label htmlFor="kiosk-student-token-input" className="block text-[11px] font-semibold text-slate-400">
-                Input Manual / Scanner Barcode USB:
-              </label>
-              <div className="relative">
+            {/* Persistent Webcam QR Scanner (Shared across Step 1 & Step 2) */}
+            <QrScannerBox
+              key="kiosk-dual-scan-persistent-scanner"
+              containerId="kiosk-dual-scan-viewport"
+              mode={currentStep === 1 ? 'STUDENT_QR' : 'PROJECTOR_QR'}
+              active={(currentStep === 1 || currentStep === 2) && !showManualModal && !isCameraTransitioning}
+              scannerRef={qrScannerRef}
+              onScan={(scannedValue) => {
+                if (currentStep === 1) {
+                  void handleStudentScan(scannedValue);
+                } else if (currentStep === 2) {
+                  void handleProjectorScan(scannedValue);
+                }
+              }}
+            />
+
+            {/* Jalur Pengembalian Langsung oleh Perwakilan (FR-07) - Hanya Step 1 */}
+            {currentStep === 1 && (
+              <div className="p-3.5 rounded-2xl bg-amber-950/30 border border-amber-500/30 flex flex-col sm:flex-row items-center justify-between gap-3 text-left">
+                <div>
+                  <p className="text-xs font-bold text-amber-300">Pengembalian oleh Perwakilan (Tanpa QR Pass)</p>
+                  <p className="text-[11px] text-amber-200/80">
+                    Pilih jalur ini jika unit dikembalikan oleh teman/perwakilan tanpa ketua kelas hadir.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  disabled={scanningLoading || isCameraTransitioning}
+                  onClick={() => void handleEnterDirectReturn()}
+                  className="w-full sm:w-auto shrink-0 px-4 py-2.5 bg-amber-600 hover:bg-amber-500 text-white font-bold text-xs rounded-xl transition-colors disabled:opacity-50"
+                >
+                  Pengembalian Langsung (Perwakilan)
+                </button>
+              </div>
+            )}
+
+            {/* Input Manual / USB Barcode Scanner Fallback untuk Step 1 */}
+            {currentStep === 1 && (
+              <div className="space-y-3 pt-2 border-t border-slate-800/80 text-left">
+                <label htmlFor="kiosk-student-token-input" className="block text-[11px] font-semibold text-slate-400">
+                  Input Manual / Scanner Barcode USB:
+                </label>
+                <div className="relative">
+                  <input
+                    id="kiosk-student-token-input"
+                    type="text"
+                    autoFocus
+                    value={scannerInput}
+                    onChange={(e) => setScannerInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' && scannerInput.trim()) {
+                        void handleStudentScan(scannerInput.trim());
+                      }
+                    }}
+                    placeholder="Tempelkan atau ketik token QR Pass di sini lalu Enter..."
+                    className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                    disabled={scanningLoading || isCameraTransitioning}
+                  />
+                </div>
+
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <button
+                    type="button"
+                    disabled={scanningLoading || isCameraTransitioning || !scannerInput.trim()}
+                    onClick={() => void handleStudentScan(scannerInput.trim())}
+                    className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
+                  >
+                    {scanningLoading ? 'Memverifikasi Token...' : 'Verifikasi QR'}
+                  </button>
+                  <button
+                    type="button"
+                    disabled={scanningLoading || isCameraTransitioning}
+                    onClick={() => void handleOpenManualModal()}
+                    className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
+                  >
+                    Pencarian Manual (FR-16)
+                  </button>
+                </div>
+
+                <div className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-center gap-2">
+                  <span>🔒</span>
+                  <span>Token bertanda tangan kriptografis server (HS256) berumur 60 detik.</span>
+                </div>
+              </div>
+            )}
+
+            {/* Input Manual / USB Barcode Scanner Fallback untuk Step 2 */}
+            {currentStep === 2 && (
+              <div className="space-y-3 pt-2 border-t border-slate-800/80">
+                <label htmlFor="kiosk-projector-code-input" className="block text-[11px] font-semibold text-slate-400">
+                  Input Manual / Scanner Barcode USB:
+                </label>
                 <input
-                  id="kiosk-student-token-input"
+                  id="kiosk-projector-code-input"
                   type="text"
                   autoFocus
                   value={scannerInput}
                   onChange={(e) => setScannerInput(e.target.value)}
                   onKeyDown={(e) => {
                     if (e.key === 'Enter' && scannerInput.trim()) {
-                      void handleStudentScan(scannerInput.trim());
+                      void handleProjectorScan(scannerInput.trim());
                     }
                   }}
-                  placeholder="Tempelkan atau ketik token QR Pass di sini lalu Enter..."
-                  className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30"
+                  placeholder="Ketik atau scan kode proyektor (mis. PROJ-001) lalu Enter..."
+                  className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 uppercase font-mono tracking-wider"
                   disabled={scanningLoading || isCameraTransitioning}
                 />
-              </div>
 
-              <div className="flex flex-col sm:flex-row gap-2">
                 <button
                   type="button"
                   disabled={scanningLoading || isCameraTransitioning || !scannerInput.trim()}
-                  onClick={() => void handleStudentScan(scannerInput.trim())}
-                  className="flex-1 py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
+                  onClick={() => void handleProjectorScan(scannerInput.trim())}
+                  className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
                 >
-                  {scanningLoading ? 'Memverifikasi Token...' : 'Verifikasi QR'}
-                </button>
-                <button
-                  type="button"
-                  disabled={scanningLoading || isCameraTransitioning}
-                  onClick={() => void handleOpenManualModal()}
-                  className="px-4 py-3 bg-slate-800 hover:bg-slate-700 text-slate-300 font-semibold text-xs rounded-xl border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  Pencarian Manual (FR-16)
-                </button>
-              </div>
-            </div>
-
-            <div className="pt-3 border-t border-slate-800/80 text-[11px] text-slate-500 flex items-center justify-center gap-2">
-              <span>🔒</span>
-              <span>Token bertanda tangan kriptografis server (HS256) berumur 60 detik.</span>
-            </div>
-          </div>
-        )}
-
-        {/* STEP 2: Scan Projector Unit */}
-        {currentStep === 2 && (student || isDirectReturnMode) && (
-          <div className="bg-slate-900/90 border border-slate-800 rounded-3xl p-6 md:p-8 max-w-2xl mx-auto w-full space-y-5 shadow-2xl">
-            {/* Context Badge Card: Student Verified OR Direct Return */}
-            {student ? (
-              <div className="p-4 rounded-2xl bg-blue-950/40 border border-blue-500/30 flex items-center gap-4">
-                {student.profile_photo_signed_url ? (
-                  <img
-                    src={student.profile_photo_signed_url}
-                    alt={student.name}
-                    className="h-14 w-14 rounded-xl object-cover border border-blue-400"
-                  />
-                ) : (
-                  <div className="h-14 w-14 rounded-xl bg-blue-900 flex items-center justify-center text-lg font-bold">
-                    {student.name.charAt(0)}
-                  </div>
-                )}
-                <div className="flex-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-400">
-                      Ketua Terverifikasi
-                    </span>
-                    <span className="text-[11px] font-mono text-slate-400">Metode: {student.identification_method}</span>
-                  </div>
-                  <h3 className="text-base font-bold text-white truncate mt-0.5">{student.name}</h3>
-                  <p className="text-xs text-slate-400 font-mono">
-                    NIM: {student.nim} • {student.class_name}
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 rounded-2xl bg-amber-950/40 border border-amber-500/40 flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                <div>
-                  <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-300">
-                    Mode Pengembalian Langsung (Perwakilan)
-                  </span>
-                  <p className="text-xs text-amber-100 mt-1.5 leading-relaxed">
-                    QR Pass mahasiswa dilewati. Pindai kode QR unit proyektor yang berstatus <strong>BORROWED</strong>.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  disabled={scanningLoading || isCameraTransitioning}
-                  onClick={() => void resetKiosk()}
-                  className="shrink-0 px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-xs font-semibold text-slate-200 border border-slate-700 transition-colors disabled:opacity-50"
-                >
-                  Kembali ke Pindai QR Pass
+                  {scanningLoading ? 'Mengecek Status Unit...' : 'Periksa Proyektor'}
                 </button>
               </div>
             )}
-
-            <div className="text-center space-y-1">
-              <span className="inline-block px-3 py-1 rounded-full bg-blue-500/20 text-blue-400 text-xs font-semibold">
-                Langkah 2 dari 4
-              </span>
-              <h2 className="text-2xl font-bold text-white tracking-tight">Pindai QR Unit Proyektor</h2>
-              <p className="text-sm text-slate-400">
-                Pindai stiker kode QR pada fisik unit proyektor (misal: PROJ-001) lewat kamera webcam atau input teks.
-              </p>
-            </div>
-
-            {/* Webcam QR Scanner untuk Unit Proyektor */}
-            <QrScannerBox
-              key="kiosk-step2-projector-scanner"
-              mode="PROJECTOR_QR"
-              active={currentStep === 2 && !isCameraTransitioning}
-              scannerRef={qrScannerRef}
-              onScan={(code) => void handleProjectorScan(code)}
-            />
-
-            {/* Input Manual / USB Barcode Scanner Fallback */}
-            <div className="space-y-3 pt-2 border-t border-slate-800/80">
-              <label htmlFor="kiosk-projector-code-input" className="block text-[11px] font-semibold text-slate-400">
-                Input Manual / Scanner Barcode USB:
-              </label>
-              <input
-                id="kiosk-projector-code-input"
-                type="text"
-                autoFocus
-                value={scannerInput}
-                onChange={(e) => setScannerInput(e.target.value)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter' && scannerInput.trim()) {
-                    void handleProjectorScan(scannerInput.trim());
-                  }
-                }}
-                placeholder="Ketik atau scan kode proyektor (mis. PROJ-001) lalu Enter..."
-                className="w-full px-4 py-3.5 bg-slate-950 border border-slate-700 rounded-2xl text-sm text-white placeholder-slate-500 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-500/30 uppercase font-mono tracking-wider"
-                disabled={scanningLoading || isCameraTransitioning}
-              />
-
-              <button
-                type="button"
-                disabled={scanningLoading || isCameraTransitioning || !scannerInput.trim()}
-                onClick={() => void handleProjectorScan(scannerInput.trim())}
-                className="w-full py-3 bg-blue-600 hover:bg-blue-500 text-white font-bold text-sm rounded-xl transition-colors disabled:opacity-50"
-              >
-                {scanningLoading ? 'Mengecek Status Unit...' : 'Periksa Proyektor'}
-              </button>
-            </div>
           </div>
         )}
 
