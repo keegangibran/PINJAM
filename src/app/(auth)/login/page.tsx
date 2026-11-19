@@ -4,6 +4,7 @@ import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import Link from 'next/link';
 import { getSafeRedirectDestination } from '@/lib/auth/redirect';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 function LoginForm() {
   const searchParams = useSearchParams();
@@ -94,8 +95,10 @@ function LoginForm() {
           <label className="block text-xs font-semibold text-slate-700 mb-1">
             Kata Sandi
           </label>
-          <input
-            type="password"
+          <PasswordInput
+            id="password"
+            name="password"
+            autoComplete="current-password"
             required
             value={password}
             onChange={(e) => setPassword(e.target.value)}

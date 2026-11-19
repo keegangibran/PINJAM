@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import PasswordInput from '@/components/ui/PasswordInput';
 
 interface ClassOption {
   id: string;
@@ -190,8 +191,10 @@ export default function RegistrationForm() {
         <label className="block text-xs font-semibold text-slate-700 mb-1">
           Kata Sandi Akun
         </label>
-        <input
-          type="password"
+        <PasswordInput
+          id="password"
+          name="password"
+          autoComplete="new-password"
           required
           minLength={6}
           value={password}
