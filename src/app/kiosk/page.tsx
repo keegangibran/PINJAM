@@ -69,16 +69,26 @@ export default function KioskPage() {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [capturedPhoto, setCapturedPhoto] = useState<string | null>(null);
   const [countdown, setCountdown] = useState<number | null>(null);
+  const countdownTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   // Condition & Notes
   const [conditionNotes, setConditionNotes] = useState('');
   const [showIssueModal, setShowIssueModal] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const isSubmittingRef = useRef(false);
   const [transactionSuccess, setTransactionSuccess] = useState<KioskTransactionSuccess | null>(null);
 
   // 30s Inactivity Auto-Reset
   const [inactivityTimer, setInactivityTimer] = useState<number>(30);
   const lastActivityRef = useRef<number>(Date.now());
+
+  const clearCountdownTimer = useCallback(() => {
+    if (countdownTimerRef.current !== null) {
+      clearInterval(countdownTimerRef.current);
+      countdownTimerRef.current = null;
+    }
+    setCountdown(null);
+  }, []);
 
   const stopPhotoStream = useCallback(() => {
     if (activePhotoStreamRef.current) {
@@ -97,6 +107,8 @@ export default function KioskPage() {
   }, []);
 
   const resetKiosk = useCallback(async () => {
+    if (isSubmittingRef.current) return;
+    clearCountdownTimer();
     stopPhotoStream();
     try {
       await stopQrScannerSafely();
@@ -125,7 +137,14 @@ export default function KioskPage() {
     } finally {
       setIsCameraTransitioning(false);
     }
-  }, [stopPhotoStream, stopQrScannerSafely]);
+  }, [clearCountdownTimer, stopPhotoStream, stopQrScannerSafely]);
+
+  // Cleanup timer hitung mundur saat unmount
+  useEffect(() => {
+    return () => {
+      clearCountdownTimer();
+    };
+  }, [clearCountdownTimer]);
 
   // Update activity timestamp on user interaction
   const recordActivity = useCallback(() => {
@@ -371,14 +390,14 @@ export default function KioskPage() {
   // Trigger Snapshot with 3s Countdown
   const triggerCountdownSnapshot = () => {
     recordActivity();
+    clearCountdownTimer();
     let sec = 3;
     setCountdown(sec);
 
-    const interval = setInterval(() => {
+    countdownTimerRef.current = setInterval(() => {
       sec -= 1;
       if (sec <= 0) {
-        clearInterval(interval);
-        setCountdown(null);
+        clearCountdownTimer();
         captureWebcamFrame();
       } else {
         setCountdown(sec);
@@ -404,6 +423,11 @@ export default function KioskPage() {
 
   // Submit Final Transaction (BORROW / RETURN)
   const handleFinalTransaction = async (condition: 'NORMAL' | 'ISSUE') => {
+    // Synchronous guard anti double-click (mencegah pemanggilan ganda pada tick yang sama)
+    if (isSubmittingRef.current) {
+      return;
+    }
+
     if (
       !projector ||
       !capturedPhoto ||
@@ -418,6 +442,8 @@ export default function KioskPage() {
     ) {
       return;
     }
+
+    isSubmittingRef.current = true;
     recordActivity();
     setIsSubmitting(true);
     setErrorMessage(null);
@@ -463,6 +489,7 @@ export default function KioskPage() {
     } catch {
       setErrorMessage('Terjadi gangguan jaringan saat memproses transaksi di server.');
     } finally {
+      isSubmittingRef.current = false;
       setIsSubmitting(false);
       setShowIssueModal(false);
     }
@@ -512,8 +539,9 @@ export default function KioskPage() {
 
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => void resetKiosk()}
-            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors"
+            className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Reset Sesi
           </button>
@@ -875,7 +903,7 @@ export default function KioskPage() {
                   <div className="flex gap-2">
                     <button
                       type="button"
-                      disabled={isDirectReturnMode}
+                      disabled={isDirectReturnMode || isSubmitting}
                       onClick={() => {
                         setReturnerType('BORROWER');
                         setRepresentativeConfirmed(false);
@@ -890,11 +918,12 @@ export default function KioskPage() {
                     </button>
                     <button
                       type="button"
+                      disabled={isSubmitting}
                       onClick={() => {
                         setReturnerType('REPRESENTATIVE');
                         setRepresentativeConfirmed(false);
                       }}
-                      className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors ${
+                      className={`flex-1 py-1.5 px-3 rounded-xl text-xs font-semibold transition-colors disabled:opacity-40 disabled:cursor-not-allowed ${
                         returnerType === 'REPRESENTATIVE'
                           ? 'bg-blue-600 text-white'
                           : 'bg-slate-800 text-slate-400 hover:text-white'
@@ -914,17 +943,19 @@ export default function KioskPage() {
                     <div className="pt-1 space-y-2">
                       <input
                         type="text"
+                        disabled={isSubmitting}
                         value={representativeName}
                         onChange={(e) => setRepresentativeName(e.target.value)}
                         placeholder="Ketik nama lengkap perwakilan..."
-                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500"
+                        className="w-full px-3 py-2 bg-slate-900 border border-slate-700 rounded-xl text-xs text-white focus:outline-none focus:border-blue-500 disabled:opacity-50 disabled:cursor-not-allowed"
                       />
-                      <label className="flex items-start gap-2 text-[11px] text-slate-300 cursor-pointer select-none">
+                      <label className={`flex items-start gap-2 text-[11px] text-slate-300 select-none ${isSubmitting ? 'cursor-not-allowed opacity-50' : 'cursor-pointer'}`}>
                         <input
                           type="checkbox"
+                          disabled={isSubmitting}
                           checked={representativeConfirmed}
                           onChange={(e) => setRepresentativeConfirmed(e.target.checked)}
-                          className="mt-0.5 rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-blue-500"
+                          className="mt-0.5 rounded border-slate-600 bg-slate-900 text-blue-600 focus:ring-blue-500 disabled:cursor-not-allowed"
                         />
                         <span>
                           Petugas telah memeriksa identitas pengembali dan mengonfirmasi nama perwakilan di atas.
@@ -980,8 +1011,9 @@ export default function KioskPage() {
               ) : (
                 <button
                   type="button"
+                  disabled={isSubmitting}
                   onClick={() => setCapturedPhoto(null)}
-                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition-colors"
+                  className="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold rounded-xl border border-slate-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Foto Ulang
                 </button>
@@ -999,32 +1031,68 @@ export default function KioskPage() {
                   {/* Normal Button */}
                   <button
                     type="button"
-                    disabled={!canConfirmTransaction}
+                    disabled={!canConfirmTransaction || isSubmitting}
                     onClick={() => void handleFinalTransaction('NORMAL')}
-                    className="p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-left font-bold text-base shadow-xl shadow-emerald-900/30 border border-emerald-400/40 transition-all disabled:opacity-50 flex flex-col justify-between"
+                    className="p-5 rounded-2xl bg-emerald-600 hover:bg-emerald-500 text-white text-left font-bold text-base shadow-xl shadow-emerald-900/30 border border-emerald-400/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center gap-2 text-lg">
-                        <span>✓</span>
-                        <span>Kondisi Terlihat Normal</span>
+                        {isSubmitting ? (
+                          <>
+                            <svg
+                              className="animate-spin h-5 w-5 text-white shrink-0"
+                              xmlns="http://www.w3.org/2000/svg"
+                              fill="none"
+                              viewBox="0 0 24 24"
+                            >
+                              <circle
+                                className="opacity-25"
+                                cx="12"
+                                cy="12"
+                                r="10"
+                                stroke="currentColor"
+                                strokeWidth="4"
+                              />
+                              <path
+                                className="opacity-75"
+                                fill="currentColor"
+                                d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                              />
+                            </svg>
+                            <span>
+                              {isBorrow ? 'Memproses Peminjaman...' : 'Memproses Pengembalian...'}
+                            </span>
+                          </>
+                        ) : (
+                          <>
+                            <span>✓</span>
+                            <span>Kondisi Terlihat Normal</span>
+                          </>
+                        )}
                       </div>
                       <p className="text-xs text-emerald-100 font-normal mt-1 leading-relaxed">
-                        {isBorrow
+                        {isSubmitting
+                          ? 'Mengunggah dokumentasi dan mencatat transaksi...'
+                          : isBorrow
                           ? 'Menerima unit proyektor dalam keadaan normal dan siap digunakan.'
                           : 'Mengembalikan unit proyektor dalam keadaan baik dan lengkap.'}
                       </p>
                     </div>
                     <span className="text-[11px] font-mono mt-3 opacity-90">
-                      {isBorrow ? 'Status Unit: BORROWED' : 'Status Unit: AVAILABLE'}
+                      {isSubmitting
+                        ? 'Mohon tunggu sejenak...'
+                        : isBorrow
+                        ? 'Status Unit: BORROWED'
+                        : 'Status Unit: AVAILABLE'}
                     </span>
                   </button>
 
                   {/* Report Issue Button */}
                   <button
                     type="button"
-                    disabled={!canConfirmTransaction}
+                    disabled={!canConfirmTransaction || isSubmitting}
                     onClick={() => setShowIssueModal(true)}
-                    className="p-5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-left font-bold text-base shadow-xl shadow-amber-900/30 border border-amber-400/40 transition-all disabled:opacity-50 flex flex-col justify-between"
+                    className="p-5 rounded-2xl bg-amber-600 hover:bg-amber-500 text-white text-left font-bold text-base shadow-xl shadow-amber-900/30 border border-amber-400/40 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex flex-col justify-between"
                   >
                     <div>
                       <div className="flex items-center gap-2 text-lg">
@@ -1164,18 +1232,41 @@ export default function KioskPage() {
             <div className="flex gap-2 pt-2 border-t border-slate-800">
               <button
                 type="button"
+                disabled={scanningLoading}
                 onClick={() => setShowManualModal(false)}
-                className="flex-1 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+                className="flex-1 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
               <button
                 type="button"
-                disabled={!selectedStudentId || !manualReason.trim()}
+                disabled={!selectedStudentId || !manualReason.trim() || scanningLoading}
                 onClick={handleManualLookupSubmit}
-                className="flex-1 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50"
+                className="flex-1 py-2 rounded-xl bg-blue-600 text-xs font-bold text-white hover:bg-blue-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
-                Gunakan Pilihan Ini
+                {scanningLoading && (
+                  <svg
+                    className="animate-spin h-3.5 w-3.5 text-white shrink-0"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                )}
+                <span>{scanningLoading ? 'Memproses...' : 'Gunakan Pilihan Ini'}</span>
               </button>
             </div>
           </div>
@@ -1213,7 +1304,7 @@ export default function KioskPage() {
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => setShowIssueModal(false)}
-                className="flex-1 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-700"
+                className="flex-1 py-2 rounded-xl bg-slate-800 text-xs font-semibold text-slate-300 hover:bg-slate-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
                 Batal
               </button>
@@ -1221,9 +1312,31 @@ export default function KioskPage() {
                 type="button"
                 disabled={isSubmitting}
                 onClick={() => handleFinalTransaction('ISSUE')}
-                className="flex-1 py-2 rounded-xl bg-amber-600 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50"
+                className="flex-1 py-2 rounded-xl bg-amber-600 text-xs font-bold text-white hover:bg-amber-500 disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1.5"
               >
-                {isSubmitting ? 'Menyimpan...' : 'Kirim Laporan Kendala'}
+                {isSubmitting && (
+                  <svg
+                    className="animate-spin h-3.5 w-3.5 text-white shrink-0"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                  >
+                    <circle
+                      className="opacity-25"
+                      cx="12"
+                      cy="12"
+                      r="10"
+                      stroke="currentColor"
+                      strokeWidth="4"
+                    />
+                    <path
+                      className="opacity-75"
+                      fill="currentColor"
+                      d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"
+                    />
+                  </svg>
+                )}
+                <span>{isSubmitting ? 'Menyimpan...' : 'Kirim Laporan Kendala'}</span>
               </button>
             </div>
           </div>

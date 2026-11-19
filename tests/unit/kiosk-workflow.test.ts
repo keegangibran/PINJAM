@@ -507,6 +507,57 @@ describe('Kiosk Integration & Workflow Tests (src/lib/kiosk-workflow.ts & src/ap
           representativeConfirmed: true,
         })
       ).toBe(false);
+
+      // Selama isSubmitting true (proses transaksi berjalan), tombol wajib ditolak
+      expect(
+        canSubmitKioskTransaction({
+          projectorStatus: 'BORROWED',
+          capturedPhoto: 'data:image/jpeg;base64,AAA',
+          isSubmitting: true,
+          returnerType: 'BORROWER',
+          representativeName: '',
+          representativeConfirmed: false,
+        })
+      ).toBe(false);
+
+      expect(
+        canSubmitKioskTransaction({
+          projectorStatus: 'AVAILABLE',
+          capturedPhoto: 'data:image/jpeg;base64,AAA',
+          isSubmitting: true,
+          returnerType: 'BORROWER',
+          representativeName: '',
+          representativeConfirmed: false,
+        })
+      ).toBe(false);
+    });
+
+    it('demonstrates synchronous double-click guard preventing duplicate transaction requests', async () => {
+      let callCount = 0;
+      const isSubmittingRef = { current: false };
+
+      const simulatedSubmit = async () => {
+        if (isSubmittingRef.current) {
+          return { accepted: false };
+        }
+        isSubmittingRef.current = true;
+        callCount++;
+
+        // Simulasikan delay network upload storage & RPC
+        await new Promise((r) => setTimeout(r, 20));
+        isSubmittingRef.current = false;
+        return { accepted: true };
+      };
+
+      // Simulasikan dua klik simultan dalam milidetik yang sama
+      const [click1, click2] = await Promise.all([
+        simulatedSubmit(),
+        simulatedSubmit(),
+      ]);
+
+      expect(click1.accepted).toBe(true);
+      expect(click2.accepted).toBe(false);
+      expect(callCount).toBe(1);
     });
   });
 
