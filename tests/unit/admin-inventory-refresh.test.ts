@@ -339,10 +339,30 @@ describe('Admin Inventory Refresh & Cache Safety Tests', () => {
       expect(html).toContain('Panel Petugas &amp; Admin');
       expect(html).toContain('Perbarui data buku besar dan ringkasan inventaris terbaru dari server');
       expect(html).toContain('Inventaris Proyektor');
+      expect(html).toContain('Buka Kiosk');
+      expect(html).toContain('href="/kiosk"');
       expect(html).toContain('Ekspor Data');
       expect(html).toContain('Semua Transaksi');
       expect(html).toContain('Sedang Dipinjam');
       expect(html).toContain('Dalam Perawatan');
+    });
+
+    it('renders "Buka Kiosk" navigation link pointing to /kiosk with proper styling and icon', () => {
+      const html = renderToStaticMarkup(React.createElement(AdminDashboardPage));
+
+      expect(html).toContain('Buka Kiosk');
+      expect(html).toContain('href="/kiosk"');
+      expect(html).toContain('bg-slate-900');
+      expect(html).toContain('title="Buka antarmuka pemindaian Kiosk meja TU"');
+      expect(html).toContain('aria-hidden="true"');
+
+      // Pastikan seluruh tombol navigasi dan aksi lain tetap dirender tanpa regresi
+      expect(html).toContain('Antrean Verifikasi');
+      expect(html).toContain('Manajemen Kelas');
+      expect(html).toContain('Inventaris Proyektor');
+      expect(html).toContain('Perbarui data buku besar dan ringkasan inventaris terbaru dari server');
+      expect(html).toContain('Ekspor Data');
+      expect(html).toContain('Keluar');
     });
   });
 });

@@ -480,6 +480,27 @@ export default function AdminDashboardPage() {
             >
               Inventaris Proyektor
             </Link>
+            <Link
+              href="/kiosk"
+              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5"
+              title="Buka antarmuka pemindaian Kiosk meja TU"
+            >
+              <svg
+                className="w-3.5 h-3.5 text-slate-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
+                />
+              </svg>
+              <span>Buka Kiosk</span>
+            </Link>
             <button
               type="button"
               onClick={() => void refreshDashboard()}
