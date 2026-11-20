@@ -1,9 +1,8 @@
 'use client';
 
-import { useState, useEffect, useCallback, useRef } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { QRCodeSVG } from 'qrcode.react';
-import Link from 'next/link';
 
 interface QrData {
   token: string;
@@ -262,12 +261,6 @@ export default function MyQrPassPage() {
             <span className="text-sm font-bold text-slate-900 tracking-tight">PINJAM Pass</span>
           </div>
           <div className="flex items-center gap-2">
-            <Link
-              href="/"
-              className="text-xs text-slate-500 hover:text-slate-800 font-medium px-2 py-1 rounded-lg hover:bg-slate-50 transition-colors"
-            >
-              Beranda
-            </Link>
             <button
               onClick={handleLogout}
               disabled={loggingOut}

@@ -19,7 +19,6 @@ export default function StudentQrLoading() {
           </div>
           <div className="flex items-center gap-2">
             <div className="h-6 w-14 bg-slate-100 rounded-lg animate-pulse" />
-            <div className="h-6 w-14 bg-slate-100 rounded-lg animate-pulse" />
           </div>
         </div>
 
