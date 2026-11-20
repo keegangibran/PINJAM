@@ -1,15 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import React from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
-import LoginPage from '@/app/(auth)/login/page';
-
-// Extract internal LoginForm component from LoginPage JSX without violating Next.js page export rules
-const pageElement = LoginPage() as React.ReactElement<{
-  children: React.ReactElement<{
-    children: React.ReactElement;
-  }>;
-}>;
-const LoginForm = pageElement.props.children.props.children.type as React.ComponentType;
+import LoginForm from '@/components/auth/LoginForm';
 
 // Mock next/navigation
 let mockSearchParams = new Map<string, string>();
@@ -20,7 +12,7 @@ vi.mock('next/navigation', () => ({
   }),
 }));
 
-describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
+describe('Universal Login UI (src/components/auth/LoginForm.tsx)', () => {
   beforeEach(() => {
     mockSearchParams.clear();
     vi.restoreAllMocks();
@@ -28,18 +20,18 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
 
   describe('1. Universal Elements & Structure (SSR & Initial Render)', () => {
     it('renders the universal title "Masuk ke Akun"', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('Masuk ke Akun');
       expect(html).toContain('<h1 class="mt-3 text-2xl font-bold tracking-tight text-slate-900">Masuk ke Akun</h1>');
     });
 
     it('renders the universal description without role bias', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('Masuk dengan akun terdaftar untuk mahasiswa, petugas, atau administrator.');
     });
 
     it('does NOT contain role selectors, role tabs, or role dropdowns', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       // No select element
       expect(html).not.toContain('<select');
       // No role dropdown or tab options
@@ -52,34 +44,35 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
     });
 
     it('renders PINJAM system badge', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('PINJAM');
     });
 
     it('applies responsive card styling (p-6 sm:p-8)', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('p-6 sm:p-8');
       expect(html).toContain('max-w-md');
     });
 
-    it('renders navigation links to /register and home /', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+    it('renders navigation link to /register and removes legacy home backlink', () => {
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('href="/register"');
       expect(html).toContain('Daftar akun di sini');
-      expect(html).toContain('href="/"');
-      expect(html).toContain('← Kembali ke Beranda');
+      // Legacy "← Kembali ke Beranda" link is removed because / is now the login page
+      expect(html).not.toContain('← Kembali ke Beranda');
     });
 
-    it('renders LoginPage wrapper with Suspense fallback', () => {
-      const pageHtml = renderToStaticMarkup(React.createElement(LoginPage));
-      expect(pageHtml).toContain('Masuk ke Akun');
-      expect(pageHtml).toContain('min-h-screen');
+    it('renders LoginForm in container with proper styling', () => {
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
+      expect(html).toContain('Masuk ke Akun');
+      expect(html).toContain('rounded-2xl');
+      expect(html).toContain('bg-white');
     });
   });
 
   describe('2. Accessibility & Form Labels', () => {
     it('properly links Alamat Email label to input via htmlFor="email" and id="email"', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('for="email"');
       expect(html).toContain('Alamat Email');
       expect(html).toContain('id="email"');
@@ -88,12 +81,12 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
     });
 
     it('renders the responsive placeholder for email input', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('placeholder="nama@unimed.ac.id atau email terdaftar"');
     });
 
     it('properly links Kata Sandi label to input via htmlFor="password" and id="password"', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('for="password"');
       expect(html).toContain('Kata Sandi');
       expect(html).toContain('id="password"');
@@ -101,7 +94,7 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
     });
 
     it('renders submit button with initial label "Masuk Akun"', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).toContain('type="submit"');
       expect(html).toContain('Masuk Akun');
     });
@@ -110,7 +103,7 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
   describe('3. Error Banner Accessibility', () => {
     it('renders error banner with role="alert" and aria-live="assertive" when error is present', () => {
       mockSearchParams.set('error', 'Sesi Anda telah kedaluwarsa. Silakan masuk kembali.');
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
 
       expect(html).toContain('role="alert"');
       expect(html).toContain('aria-live="assertive"');
@@ -118,7 +111,7 @@ describe('Universal Login UI (src/app/(auth)/login/page.tsx)', () => {
     });
 
     it('does NOT render error banner when there is no error', () => {
-      const html = renderToStaticMarkup(React.createElement(LoginPage));
+      const html = renderToStaticMarkup(React.createElement(LoginForm));
       expect(html).not.toContain('role="alert"');
     });
   });
