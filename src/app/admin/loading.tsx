@@ -1,32 +1,33 @@
 import React from 'react';
+import { Badge } from '@/components/ui';
 
 export default function AdminLoading() {
   return (
     <div
-      className="min-h-screen p-6 md:p-8 bg-slate-50 text-slate-900"
+      className="min-h-screen p-4 sm:p-6 md:p-8 bg-canvas text-main"
       role="status"
       aria-label="Memuat Dasbor Tata Usaha"
     >
       <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
         {/* Navigation & Title Header Skeleton */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
-                Panel Petugas & Admin
-              </span>
-              <div className="h-7 w-64 bg-slate-200 rounded-lg animate-pulse" />
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-borderline gap-5">
+          <div className="space-y-1.5">
+            <div>
+              <Badge variant="primary" size="sm">
+                Panel Petugas &amp; Admin
+              </Badge>
             </div>
-            <p className="text-sm text-slate-400 mt-1">
+            <div className="h-8 w-56 bg-slate-200 rounded-lg animate-pulse" />
+            <p className="text-xs sm:text-sm text-slate-400">
               Menyiapkan data operasional dan status peminjaman...
             </p>
           </div>
 
           <div className="flex flex-wrap items-center justify-end gap-2">
-            <div className="h-8 w-28 bg-slate-200 rounded-lg animate-pulse" />
-            <div className="h-8 w-28 bg-slate-200 rounded-lg animate-pulse" />
-            <div className="h-8 w-32 bg-slate-200 rounded-lg animate-pulse" />
-            <div className="h-8 w-20 bg-slate-200 rounded-lg animate-pulse" />
+            <div className="h-9 w-28 bg-slate-200 rounded-lg animate-pulse" />
+            <div className="h-9 w-28 bg-slate-200 rounded-lg animate-pulse" />
+            <div className="h-9 w-32 bg-slate-200 rounded-lg animate-pulse" />
+            <div className="h-9 w-20 bg-slate-200 rounded-lg animate-pulse" />
           </div>
         </div>
 

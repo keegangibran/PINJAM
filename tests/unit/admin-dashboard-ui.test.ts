@@ -366,11 +366,43 @@ describe('Admin Dashboard UI/UX & Responsive Ledger Tests (Fase 3)', () => {
       expect(html).toContain('Jalankan Retensi Sekarang');
     });
 
+    it('renders modernized Header, Shell & Toolbar with Balanced Navy design tokens', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+        })
+      );
+
+      // Shell
+      expect(html).toContain('bg-canvas');
+      expect(html).toContain('text-main');
+
+      // Header
+      expect(html).toContain('Panel Petugas &amp; Admin');
+      expect(html).toContain('Dashboard Admin');
+      expect(html).toContain(
+        'Pantau inventaris proyektor, aktivitas peminjaman, dan pengembalian secara real-time.'
+      );
+
+      // Page Navigation
+      expect(html).toContain('Antrean Verifikasi');
+      expect(html).toContain('Manajemen Kelas');
+      expect(html).toContain('Inventaris Proyektor');
+      expect(html).toContain('Buka Kiosk');
+
+      // Actions
+      expect(html).toContain('Muat Ulang');
+      expect(html).toContain('Ekspor Data');
+      expect(html).toContain('Keluar');
+    });
+
     it('renders App Page wrapper component without SSR error', () => {
       const html = renderToStaticMarkup(React.createElement(AdminDashboardPage));
 
       expect(html).toContain('Panel Petugas &amp; Admin');
-      expect(html).toContain('Dashboard Buku Besar Digital');
+      expect(html).toContain('Dashboard Admin');
       expect(html).toContain('data-testid="summary-card-total"');
       expect(html).toContain('data-testid="summary-card-maintenance"');
     });

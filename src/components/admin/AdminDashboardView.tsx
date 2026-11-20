@@ -5,6 +5,21 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
+import { Button, Badge, LoadingSpinner } from '@/components/ui';
+import {
+  UserCheck,
+  GraduationCap,
+  Layers,
+  QrCode,
+  RefreshCw,
+  FileDown,
+  LogOut,
+  CheckCircle2,
+  Clock,
+  AlertTriangle,
+  Wrench,
+  ArrowUpRight,
+} from 'lucide-react';
 
 export interface SummaryData {
   total_projectors: number;
@@ -531,114 +546,105 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   const isStorageWarning = maintenanceData?.storage_monitoring?.warning_active || storageUsagePct >= 70;
 
   return (
-    <div className="min-h-screen p-6 md:p-8 bg-slate-50 text-slate-900">
+    <div className="min-h-screen p-4 sm:p-6 md:p-8 bg-canvas text-main">
       <div className="max-w-7xl 2xl:max-w-screen-2xl mx-auto space-y-6">
         {/* Navigation & Title Header */}
-        <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-slate-200 gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <span className="rounded-full bg-indigo-100 px-2.5 py-0.5 text-xs font-semibold text-indigo-700">
+        <div className="flex flex-col lg:flex-row lg:items-end justify-between pb-5 border-b border-borderline gap-5">
+          <div className="space-y-1.5">
+            <div>
+              <Badge variant="primary" size="sm">
                 Panel Petugas &amp; Admin
-              </span>
-              <h1 className="text-2xl font-bold text-slate-900">Dashboard Buku Besar Digital</h1>
+              </Badge>
             </div>
-            <p className="text-sm text-slate-500 mt-1 max-w-md">
-              Pemantauan status proyektor real-time, pelacakan keterlambatan, dan riwayat transaksi.
+            <h1 className="text-2xl sm:text-3xl font-extrabold text-navy-900 tracking-tight">
+              Dashboard Admin
+            </h1>
+            <p className="text-xs sm:text-sm text-slate-500 max-w-xl leading-relaxed">
+              Pantau inventaris proyektor, aktivitas peminjaman, dan pengembalian secara real-time.
             </p>
           </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2">
-            <Link
-              href="/admin/verifications"
-              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
-            >
-              Antrean Verifikasi
-            </Link>
-            <Link
-              href="/admin/classes"
-              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
-            >
-              Manajemen Kelas
-            </Link>
-            <Link
-              href="/admin/projectors"
-              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm"
-            >
-              Inventaris Proyektor
-            </Link>
-            <Link
-              href="/kiosk"
-              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5"
-              title="Buka antarmuka pemindaian Kiosk meja TU"
-            >
-              <svg
-                className="w-3.5 h-3.5 text-slate-300"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-                aria-hidden="true"
+          {/* Toolbar Navigasi & Aksi */}
+          <div className="flex flex-col gap-2.5">
+            {/* Kelompok 1: Navigasi Halaman */}
+            <div className="grid grid-cols-2 sm:flex sm:flex-wrap items-center gap-2">
+              <Link
+                href="/admin/verifications"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z"
-                />
-              </svg>
-              <span>Buka Kiosk</span>
-            </Link>
-            <button
-              type="button"
-              onClick={() => void refreshDashboard()}
-              disabled={loading || isRefreshing}
-              className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg text-xs font-medium text-slate-700 hover:bg-slate-50 transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-              title="Perbarui data buku besar dan ringkasan inventaris terbaru dari server"
-            >
-              <svg
-                className={`w-3.5 h-3.5 text-slate-500 ${loading || isRefreshing ? 'animate-spin text-blue-600' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
+                <UserCheck size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Antrean Verifikasi</span>
+              </Link>
+              <Link
+                href="/admin/classes"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
               >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  strokeWidth="2"
-                  d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"
-                />
-              </svg>
-              <span>{loading || isRefreshing ? 'Memuat...' : 'Muat Ulang'}</span>
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsExportModalOpen(true)}
-              className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5"
-            >
-              <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              Ekspor Data
-            </button>
-            <button
-              type="button"
-              onClick={handleLogout}
-              disabled={loggingOut}
-              className="px-3 py-1.5 bg-red-50 hover:bg-red-100 text-red-700 border border-red-200 rounded-lg text-xs font-medium transition shadow-sm flex items-center gap-1.5 disabled:opacity-50"
-            >
-              {loggingOut ? (
-                <>
-                  <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-red-600 border-t-transparent"></span>
-                  Keluar...
-                </>
-              ) : (
-                <>
-                  <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
-                  </svg>
-                  Keluar
-                </>
-              )}
-            </button>
+                <GraduationCap size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Manajemen Kelas</span>
+              </Link>
+              <Link
+                href="/admin/projectors"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
+              >
+                <Layers size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Inventaris Proyektor</span>
+              </Link>
+              <Link
+                href="/kiosk"
+                title="Buka antarmuka pemindaian Kiosk meja TU"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element bg-slate-900 hover:bg-navy-900 text-white text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
+              >
+                <QrCode size={14} aria-hidden="true" className="text-brand-secondary shrink-0" />
+                <span className="truncate">Buka Kiosk</span>
+              </Link>
+            </div>
+
+            {/* Kelompok 2: Tombol Aksi */}
+            <div className="flex items-center justify-end gap-2 pt-1 sm:pt-0">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void refreshDashboard()}
+                disabled={loading || isRefreshing}
+                leftIcon={
+                  <RefreshCw
+                    size={14}
+                    className={`text-slate-500 ${loading || isRefreshing ? 'animate-spin text-brand-primary' : ''}`}
+                  />
+                }
+                title="Perbarui data buku besar dan ringkasan inventaris terbaru dari server"
+                className="flex-1 sm:flex-initial min-h-[40px] sm:min-h-[36px]"
+              >
+                {loading || isRefreshing ? 'Memuat...' : 'Muat Ulang'}
+              </Button>
+
+              <Button
+                variant="primary"
+                size="sm"
+                onClick={() => setIsExportModalOpen(true)}
+                leftIcon={<FileDown size={14} className="shrink-0" />}
+                className="flex-1 sm:flex-initial min-h-[40px] sm:min-h-[36px] bg-brand-primary hover:bg-blue-700"
+              >
+                Ekspor Data
+              </Button>
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleLogout}
+                disabled={loggingOut}
+                leftIcon={
+                  loggingOut ? (
+                    <LoadingSpinner size="sm" variant="neutral" />
+                  ) : (
+                    <LogOut size={14} className="text-rose-600 shrink-0" />
+                  )
+                }
+                className="bg-white border-rose-200 text-rose-600 hover:bg-rose-50 hover:border-rose-300 hover:text-rose-700 focus:ring-rose-500/20 active:bg-rose-100/70 min-h-[40px] sm:min-h-[36px] shadow-sm flex-1 sm:flex-initial"
+              >
+                {loggingOut ? 'Keluar...' : 'Keluar'}
+              </Button>
+            </div>
           </div>
         </div>
 
@@ -662,16 +668,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
             type="button"
             data-testid="summary-card-total"
             onClick={() => router.push('/admin/projectors')}
-            className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm text-left cursor-pointer transition-all duration-150 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-slate-400 group"
+            className="p-4 sm:p-5 rounded-card border border-borderline bg-surface shadow-sm text-left cursor-pointer transition-all duration-150 hover:border-slate-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-navy-800/20 group"
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-slate-500 uppercase tracking-wide group-hover:text-slate-700 transition-colors">
-                Total Unit Aktif
-              </p>
-              <span className="text-slate-300 group-hover:text-slate-500 transition-colors">↗</span>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-navy-50 text-navy-800">
+                  <Layers size={16} />
+                </div>
+                <p className="text-xs font-bold text-slate-500 uppercase tracking-wider group-hover:text-navy-900 transition-colors">
+                  Total Unit Aktif
+                </p>
+              </div>
+              <ArrowUpRight size={15} className="text-slate-300 group-hover:text-navy-800 transition-colors" />
             </div>
-            <p className="text-2xl font-bold text-slate-900 mt-1">{summary.total_projectors}</p>
-            <p className="text-[11px] text-slate-400 mt-0.5">Seluruh unit non-arsip</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-navy-900 mt-2.5 tracking-tight">
+              {summary.total_projectors}
+            </p>
+            <p className="text-[11px] text-slate-500 mt-1">Seluruh unit non-arsip</p>
           </button>
 
           {/* Card 2: Tersedia -> /admin/projectors?status=AVAILABLE */}
@@ -679,16 +692,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
             type="button"
             data-testid="summary-card-available"
             onClick={() => router.push('/admin/projectors?status=AVAILABLE')}
-            className="p-4 bg-white rounded-xl border border-emerald-200 shadow-sm bg-gradient-to-br from-white to-emerald-50/30 text-left cursor-pointer transition-all duration-150 hover:border-emerald-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-emerald-400 group"
+            className="p-4 sm:p-5 rounded-card border border-borderline hover:border-emerald-300 bg-surface shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-emerald-500/20 group"
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-emerald-700 uppercase tracking-wide group-hover:text-emerald-800 transition-colors">
-                Tersedia
-              </p>
-              <span className="text-emerald-300 group-hover:text-emerald-600 transition-colors">↗</span>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-emerald-50 text-emerald-700">
+                  <CheckCircle2 size={16} />
+                </div>
+                <p className="text-xs font-bold text-emerald-700 uppercase tracking-wider group-hover:text-emerald-800 transition-colors">
+                  Tersedia
+                </p>
+              </div>
+              <ArrowUpRight size={15} className="text-slate-300 group-hover:text-emerald-700 transition-colors" />
             </div>
-            <p className="text-2xl font-bold text-emerald-700 mt-1">{summary.available_count}</p>
-            <p className="text-[11px] text-emerald-600/80 mt-0.5">Siap dipinjam di meja TU</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-emerald-700 mt-2.5 tracking-tight">
+              {summary.available_count}
+            </p>
+            <p className="text-[11px] text-emerald-700/80 mt-1">Siap dipinjam di meja TU</p>
           </button>
 
           {/* Card 3: Sedang Dipinjam -> filter status=ACTIVE */}
@@ -696,24 +716,33 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
             type="button"
             data-testid="summary-card-borrowed"
             onClick={() => handleStatusFilterChange('ACTIVE')}
-            className={`p-4 rounded-xl border shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-blue-400 ${
+            className={`p-4 sm:p-5 rounded-card border shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-brand-primary/20 group ${
               statusFilter === 'ACTIVE'
-                ? 'bg-blue-50/80 border-blue-500 ring-2 ring-blue-500/20 shadow-md'
-                : 'bg-white border-blue-200 bg-gradient-to-br from-white to-blue-50/30 hover:border-blue-300'
+                ? 'bg-brand-soft/60 border-brand-primary ring-2 ring-brand-primary/20 shadow-md'
+                : 'bg-surface border-borderline hover:border-blue-300'
             }`}
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-blue-700 uppercase tracking-wide">
-                Sedang Dipinjam
-              </p>
-              {statusFilter === 'ACTIVE' && (
-                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-blue-600 text-white">
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-blue-50 text-brand-primary">
+                  <Clock size={16} />
+                </div>
+                <p className="text-xs font-bold text-blue-700 uppercase tracking-wider">
+                  Sedang Dipinjam
+                </p>
+              </div>
+              {statusFilter === 'ACTIVE' ? (
+                <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-brand-primary text-white">
                   Filter Aktif
                 </span>
+              ) : (
+                <span className="h-1.5 w-1.5 rounded-full bg-brand-primary/40 group-hover:bg-brand-primary transition-colors" />
               )}
             </div>
-            <p className="text-2xl font-bold text-blue-700 mt-1">{summary.borrowed_count}</p>
-            <p className="text-[11px] text-blue-600/80 mt-0.5">Dibawa oleh ketua kelas</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-blue-700 mt-2.5 tracking-tight">
+              {summary.borrowed_count}
+            </p>
+            <p className="text-[11px] text-blue-600/80 mt-1">Dibawa oleh ketua kelas</p>
           </button>
 
           {/* Card 4: Terlambat -> filter status=OVERDUE */}
@@ -721,18 +750,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
             type="button"
             data-testid="summary-card-overdue"
             onClick={() => handleStatusFilterChange('OVERDUE')}
-            className={`p-4 rounded-xl border shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-rose-400 ${
+            className={`p-4 sm:p-5 rounded-card border shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-rose-500/20 group ${
               statusFilter === 'OVERDUE'
                 ? 'bg-rose-50 border-rose-500 ring-2 ring-rose-500/20 shadow-md'
                 : summary.overdue_count > 0
-                ? 'bg-rose-50/70 border-rose-300 hover:bg-rose-100/70'
-                : 'bg-white border-slate-200 hover:border-slate-300'
+                ? 'bg-rose-50/40 border-rose-200 hover:border-rose-300'
+                : 'bg-surface border-borderline hover:border-slate-300'
             }`}
           >
             <div className="flex items-center justify-between">
-              <p className={`text-xs font-semibold uppercase tracking-wide ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-700' : 'text-slate-500'}`}>
-                Terlambat
-              </p>
+              <div className="flex items-center gap-2">
+                <div className={`p-1.5 rounded-lg ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'bg-rose-100 text-rose-700' : 'bg-slate-100 text-slate-500'}`}>
+                  <AlertTriangle size={16} />
+                </div>
+                <p className={`text-xs font-bold uppercase tracking-wider ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-700' : 'text-slate-500'}`}>
+                  Terlambat
+                </p>
+              </div>
               <div className="flex items-center gap-1.5">
                 {statusFilter === 'OVERDUE' && (
                   <span className="inline-flex px-1.5 py-0.5 rounded text-[10px] font-bold bg-rose-600 text-white">
@@ -747,10 +781,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                 )}
               </div>
             </div>
-            <p className={`text-2xl font-bold mt-1 ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-700' : 'text-slate-900'}`}>
+            <p className={`text-2xl sm:text-3xl font-extrabold mt-2.5 tracking-tight ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-700' : 'text-navy-900'}`}>
               {summary.overdue_count}
             </p>
-            <p className={`text-[11px] mt-0.5 ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-600' : 'text-slate-400'}`}>
+            <p className={`text-[11px] mt-1 ${summary.overdue_count > 0 || statusFilter === 'OVERDUE' ? 'text-rose-600 font-medium' : 'text-slate-400'}`}>
               Melewati batas waktu (due_at)
             </p>
           </button>
@@ -760,16 +794,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
             type="button"
             data-testid="summary-card-maintenance"
             onClick={() => router.push('/admin/projectors?status=MAINTENANCE')}
-            className="p-4 bg-white rounded-xl border border-amber-200 shadow-sm bg-gradient-to-br from-white to-amber-50/30 text-left cursor-pointer transition-all duration-150 hover:border-amber-300 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-amber-400 group col-span-2 md:col-span-1"
+            className="p-4 sm:p-5 rounded-card border border-borderline hover:border-amber-300 bg-surface shadow-sm text-left cursor-pointer transition-all duration-150 hover:shadow-md hover:-translate-y-0.5 active:scale-[0.99] focus:outline-none focus:ring-2 focus:ring-amber-500/20 group col-span-2 md:col-span-1"
           >
             <div className="flex items-center justify-between">
-              <p className="text-xs font-semibold text-amber-700 uppercase tracking-wide group-hover:text-amber-800 transition-colors">
-                Dalam Perawatan
-              </p>
-              <span className="text-amber-300 group-hover:text-amber-600 transition-colors">↗</span>
+              <div className="flex items-center gap-2">
+                <div className="p-1.5 rounded-lg bg-amber-50 text-amber-700">
+                  <Wrench size={16} />
+                </div>
+                <p className="text-xs font-bold text-amber-700 uppercase tracking-wider group-hover:text-amber-800 transition-colors">
+                  Dalam Perawatan
+                </p>
+              </div>
+              <ArrowUpRight size={15} className="text-slate-300 group-hover:text-amber-700 transition-colors" />
             </div>
-            <p className="text-2xl font-bold text-amber-700 mt-1">{summary.maintenance_count}</p>
-            <p className="text-[11px] text-amber-600/80 mt-0.5">Kendala / sedang diservis</p>
+            <p className="text-2xl sm:text-3xl font-extrabold text-amber-700 mt-2.5 tracking-tight">
+              {summary.maintenance_count}
+            </p>
+            <p className="text-[11px] text-amber-700/80 mt-1">Kendala / sedang diservis</p>
           </button>
         </div>
 
