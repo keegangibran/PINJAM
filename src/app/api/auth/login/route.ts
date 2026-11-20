@@ -1,11 +1,13 @@
 import { createServerSupabaseClient } from '@/lib/supabase/server';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { getRoleSafeRedirectDestination } from '@/lib/auth/redirect';
 import { NextResponse } from 'next/server';
 import { z } from 'zod';
 
 const loginSchema = z.object({
   email: z.string().email('Format email tidak valid'),
   password: z.string().min(6, 'Kata sandi minimal 6 karakter'),
+  returnUrl: z.string().optional(),
 });
 
 export async function POST(request: Request) {
@@ -21,6 +23,9 @@ export async function POST(request: Request) {
     }
 
     const { email, password } = parsed.data;
+    const { searchParams } = new URL(request.url);
+    const rawReturnUrl = parsed.data.returnUrl || searchParams.get('returnUrl');
+
     const supabase = await createServerSupabaseClient();
 
     const { data: authData, error: authError } = await supabase.auth.signInWithPassword({
@@ -35,7 +40,7 @@ export async function POST(request: Request) {
       );
     }
 
-    // Periksa peran pengguna di sisi server
+    // Periksa peran pengguna di sisi server dari database otoritatif
     const adminClient = createAdminClient();
 
     // 1. Cek staf / admin
@@ -54,11 +59,14 @@ export async function POST(request: Request) {
         );
       }
 
+      const role = staff.role as 'ADMIN' | 'STAFF';
+      const redirectTo = getRoleSafeRedirectDestination(rawReturnUrl, role, request.url);
+
       return NextResponse.json({
         success: true,
         role: staff.role,
         name: staff.name,
-        redirectTo: '/admin',
+        redirectTo,
       });
     }
 
@@ -93,9 +101,8 @@ export async function POST(request: Request) {
         currentStatus = 'PENDING_DOCUMENT';
       }
 
-      // Seluruh mahasiswa yang profilnya sudah terdaftar diarahkan ke /my-qr.
-      // Halaman /my-qr secara otomatis menangani tampilan sesuai status (misal PENDING_DOCUMENT / ACTIVE).
-      const redirectTo = '/my-qr';
+      // Seluruh mahasiswa yang profilnya sudah terdaftar diarahkan secara role-safe (default /my-qr)
+      const redirectTo = getRoleSafeRedirectDestination(rawReturnUrl, 'STUDENT', request.url);
 
       return NextResponse.json({
         success: true,
@@ -106,10 +113,13 @@ export async function POST(request: Request) {
       });
     }
 
+    // 3. Pengguna Auth tanpa profil mahasiswa maupun staf (Orphan) diarahkan ke /register
+    const redirectTo = getRoleSafeRedirectDestination(rawReturnUrl, 'ORPHAN', request.url);
+
     return NextResponse.json({
       success: true,
       role: 'STUDENT',
-      redirectTo: '/register',
+      redirectTo,
     });
   } catch (err) {
     return NextResponse.json(
@@ -118,4 +128,3 @@ export async function POST(request: Request) {
     );
   }
 }
-
