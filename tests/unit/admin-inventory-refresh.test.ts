@@ -21,6 +21,7 @@ vi.mock('next/navigation', () => ({
     push: vi.fn(),
     refresh: vi.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
 }));
 
 vi.mock('next/link', () => ({
@@ -169,6 +170,7 @@ describe('Admin Inventory Refresh & Cache Safety Tests', () => {
       const mockGte = vi.fn().mockReturnThis();
       const mockLte = vi.fn().mockReturnThis();
       const mockEqStatus = vi.fn().mockReturnThis();
+      const mockOr = vi.fn().mockReturnThis();
       const mockOrder = vi.fn().mockReturnThis();
       const mockRange = vi.fn().mockResolvedValue({
         data: [
@@ -191,10 +193,28 @@ describe('Admin Inventory Refresh & Cache Safety Tests', () => {
           eq: mockEqStatus,
           gte: mockGte,
           lte: mockLte,
+          or: mockOr,
           order: mockOrder,
           range: mockRange,
         }),
       });
+
+      // Mock Two-Stage Search for students and projectors
+      mockAdminFrom
+        .mockReturnValueOnce({
+          select: vi.fn().mockReturnValue({
+            or: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue({ data: [{ id: 's-1' }] }),
+            }),
+          }),
+        })
+        .mockReturnValueOnce({
+          select: vi.fn().mockReturnValue({
+            or: vi.fn().mockReturnValue({
+              limit: vi.fn().mockResolvedValue({ data: [] }),
+            }),
+          }),
+        });
 
       const req = new NextRequest(
         'http://localhost/api/admin/loans?status=ACTIVE&from=2026-11-13T00:00:00Z&to=2026-11-13T23:59:59Z&q=Andi'

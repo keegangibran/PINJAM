@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireStaff } from '@/lib/auth/guards';
 import { createAdminClient } from '@/lib/supabase/admin';
+import { sanitizeSearchTerm } from '@/lib/sanitizer';
 
 const CACHE_CONTROL_HEADER = 'no-store, no-cache, must-revalidate';
 
@@ -13,13 +14,14 @@ export async function GET(request: NextRequest) {
     const statusFilter = searchParams.get('status') || 'ALL';
     const fromParam = searchParams.get('from');
     const toParam = searchParams.get('to');
-    const qParam = searchParams.get('q')?.trim().toLowerCase();
+    const qParam = searchParams.get('q');
     const limit = Math.min(Math.max(parseInt(searchParams.get('limit') || '50', 10), 1), 200);
     const offset = Math.max(parseInt(searchParams.get('offset') || '0', 10), 0);
 
     const nowISO = new Date().toISOString();
 
     // 1. Hitung Ringkasan Inventaris & Keterlambatan Real-time (FR-12, FR-15)
+    // Ringkasan ini tidak terpengaruh oleh paginasi atau filter pencarian buku besar
     const [
       { count: totalProjectors },
       { count: availableCount },
@@ -99,14 +101,7 @@ export async function GET(request: NextRequest) {
         )
       `, { count: 'exact' });
 
-    if (statusFilter === 'ACTIVE') {
-      query = query.eq('status', 'ACTIVE');
-    } else if (statusFilter === 'OVERDUE') {
-      query = query.eq('status', 'ACTIVE').lt('due_at', nowISO);
-    } else if (statusFilter === 'COMPLETED') {
-      query = query.eq('status', 'COMPLETED');
-    }
-
+    // 3. Filter Tanggal (Diterapkan sebelum .range)
     if (fromParam) {
       const fromDate = new Date(fromParam).toISOString();
       query = query.gte('borrowed_at', fromDate);
@@ -120,8 +115,52 @@ export async function GET(request: NextRequest) {
       query = query.lte('borrowed_at', toDate);
     }
 
+    // 4. Filter Status Transaksi (Diterapkan sebelum .range)
+    if (statusFilter === 'ACTIVE') {
+      query = query.eq('status', 'ACTIVE');
+    } else if (statusFilter === 'OVERDUE') {
+      query = query.eq('status', 'ACTIVE').lt('due_at', nowISO);
+    } else if (statusFilter === 'COMPLETED') {
+      query = query.eq('status', 'COMPLETED');
+    }
+
+    // 5. Filter Pencarian Teks Server-Side via Two-Stage ID Resolution (Diterapkan sebelum .range)
+    const cleanQ = sanitizeSearchTerm(qParam);
+    if (cleanQ) {
+      // Tahap 1: Cari ID mahasiswa dan ID proyektor yang cocok secara paralel di DB
+      const [studentsRes, projectorsRes] = await Promise.all([
+        adminClient
+          .from('students')
+          .select('id')
+          .or(`name.ilike.%${cleanQ}%,nim.ilike.%${cleanQ}%`)
+          .limit(100),
+        adminClient
+          .from('projectors')
+          .select('id')
+          .or(`code.ilike.%${cleanQ}%,name.ilike.%${cleanQ}%`)
+          .limit(100),
+      ]);
+
+      const studentIds = (studentsRes.data || []).map((s) => s.id);
+      const projectorIds = (projectorsRes.data || []).map((p) => p.id);
+
+      // Tahap 2: Susun klausa OR terpadu pada kolom-kolom tabel loans
+      const orConditions: string[] = [];
+      if (studentIds.length > 0) {
+        orConditions.push(`student_id.in.(${studentIds.join(',')})`);
+      }
+      if (projectorIds.length > 0) {
+        orConditions.push(`projector_id.in.(${projectorIds.join(',')})`);
+      }
+      orConditions.push(`returned_by_name.ilike.%${cleanQ}%`);
+
+      query = query.or(orConditions.join(','));
+    }
+
+    // 6. Urutan Terbaru Selalu di Depan
     query = query.order('borrowed_at', { ascending: false });
 
+    // 7. Terapkan Paginasi Server-Side
     const { data: rawLoans, error, count } = await query.range(offset, offset + limit - 1);
 
     if (error) {
@@ -140,32 +179,13 @@ export async function GET(request: NextRequest) {
     const now = new Date();
     type RawLoan = (typeof rawLoans)[number];
 
-    let loans = (rawLoans || []).map((loan: RawLoan) => {
+    const loans = (rawLoans || []).map((loan: RawLoan) => {
       const is_overdue = loan.status === 'ACTIVE' && new Date(loan.due_at) < now;
       return {
         ...loan,
         is_overdue,
       };
     });
-
-    // Filter teks pencarian jika parameter q diberikan
-    if (qParam) {
-      loans = loans.filter((loan: (typeof loans)[number]) => {
-        const studentName = (loan.student as { name?: string } | null)?.name?.toLowerCase() || '';
-        const studentNim = (loan.student as { nim?: string } | null)?.nim?.toLowerCase() || '';
-        const projectorCode = (loan.projector as { code?: string } | null)?.code?.toLowerCase() || '';
-        const projectorName = (loan.projector as { name?: string } | null)?.name?.toLowerCase() || '';
-        const returnerName = loan.returned_by_name?.toLowerCase() || '';
-
-        return (
-          studentName.includes(qParam) ||
-          studentNim.includes(qParam) ||
-          projectorCode.includes(qParam) ||
-          projectorName.includes(qParam) ||
-          returnerName.includes(qParam)
-        );
-      });
-    }
 
     return NextResponse.json(
       {
