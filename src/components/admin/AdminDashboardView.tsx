@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
-import { Button, Badge, LoadingSpinner } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, Card, EmptyState, Input } from '@/components/ui';
 import {
   UserCheck,
   GraduationCap,
@@ -19,6 +19,14 @@ import {
   AlertTriangle,
   Wrench,
   ArrowUpRight,
+  Search,
+  Calendar,
+  RotateCcw,
+  X,
+  ChevronLeft,
+  ChevronRight,
+  Camera,
+  Filter,
 } from 'lucide-react';
 
 export interface SummaryData {
@@ -168,21 +176,8 @@ export function DamageNotesTooltip({ notes }: { notes: string }) {
       aria-label="Lihat catatan kendala unit proyektor"
       className="inline-block outline-none"
     >
-      <span className="inline-flex items-center gap-1 justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200 cursor-help transition hover:bg-amber-200 hover:border-amber-300">
-        <svg
-          className="w-3.5 h-3.5 text-amber-600"
-          fill="none"
-          stroke="currentColor"
-          viewBox="0 0 24 24"
-          aria-hidden="true"
-        >
-          <path
-            strokeLinecap="round"
-            strokeLinejoin="round"
-            strokeWidth="2"
-            d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
-          />
-        </svg>
+      <span className="inline-flex items-center gap-1 justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-50 text-amber-800 border border-amber-200 cursor-help transition hover:bg-amber-100 hover:border-amber-300">
+        <AlertTriangle size={13} className="text-amber-600 shrink-0" aria-hidden="true" />
         Ada Kendala
       </span>
 
@@ -937,18 +932,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
           </div>
         </div>
 
-        {/* Filter & Search Bar */}
-        <div className="p-4 bg-white rounded-xl border border-slate-200 shadow-sm space-y-4">
-          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4">
-            {/* Status Tabs */}
-            <div className="flex flex-wrap items-center gap-1.5 p-1 bg-slate-100 rounded-lg text-xs">
+        {/* Filter & Search Bar (Fase 2.2 Balanced Navy Modern Redesign) */}
+        <Card variant="default" padding="sm" className="space-y-3.5">
+          <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3.5">
+            {/* Status Tabs with Neutral/Canvas Track */}
+            <div className="flex flex-wrap items-center gap-1 p-1 bg-canvas rounded-element border border-borderline/70 text-xs">
               <button
                 type="button"
                 onClick={() => handleStatusFilterChange('ALL')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
+                className={`px-3 py-1.5 rounded-button text-xs font-semibold transition-all ${
                   statusFilter === 'ALL'
-                    ? 'bg-white text-slate-900 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-navy-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-slate-200/50'
                 }`}
               >
                 Semua Transaksi
@@ -956,10 +951,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               <button
                 type="button"
                 onClick={() => handleStatusFilterChange('ACTIVE')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
+                className={`px-3 py-1.5 rounded-button text-xs font-semibold transition-all ${
                   statusFilter === 'ACTIVE'
-                    ? 'bg-white text-blue-700 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-navy-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-slate-200/50'
                 }`}
               >
                 Sedang Dipinjam ({summary.borrowed_count})
@@ -967,10 +962,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               <button
                 type="button"
                 onClick={() => handleStatusFilterChange('OVERDUE')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
+                className={`px-3 py-1.5 rounded-button text-xs font-semibold transition-all ${
                   statusFilter === 'OVERDUE'
                     ? 'bg-rose-600 text-white shadow-sm'
-                    : 'text-rose-600 hover:text-rose-800'
+                    : 'text-rose-600 hover:text-rose-700 hover:bg-rose-50'
                 }`}
               >
                 Terlambat ({summary.overdue_count})
@@ -978,10 +973,10 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               <button
                 type="button"
                 onClick={() => handleStatusFilterChange('COMPLETED')}
-                className={`px-3 py-1.5 rounded-md font-medium transition ${
+                className={`px-3 py-1.5 rounded-button text-xs font-semibold transition-all ${
                   statusFilter === 'COMPLETED'
-                    ? 'bg-white text-emerald-700 shadow-sm'
-                    : 'text-slate-600 hover:text-slate-900'
+                    ? 'bg-navy-900 text-white shadow-sm'
+                    : 'text-slate-600 hover:text-navy-900 hover:bg-slate-200/50'
                 }`}
               >
                 Selesai
@@ -990,77 +985,213 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
             {/* Date Filters & Search */}
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span>Dari:</span>
+              {/* Date Filter: Dari */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-canvas px-2.5 py-1.5 rounded-element border border-borderline shadow-xs">
+                <Calendar size={13} className="text-slate-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-slate-500">Dari:</span>
                 <input
                   type="date"
                   value={fromDate}
                   onChange={handleFromDateChange}
-                  className="px-2 py-1 border border-slate-200 rounded-md text-xs text-slate-700 bg-white"
+                  className="bg-transparent text-xs text-main font-medium focus:outline-none cursor-pointer"
+                  title="Filter tanggal mulai peminjaman"
                 />
               </div>
 
-              <div className="flex items-center gap-1 text-xs text-slate-500">
-                <span>Sampai:</span>
+              {/* Date Filter: Sampai */}
+              <div className="flex items-center gap-1.5 text-xs text-slate-600 bg-canvas px-2.5 py-1.5 rounded-element border border-borderline shadow-xs">
+                <Calendar size={13} className="text-slate-400 shrink-0" />
+                <span className="text-[11px] font-semibold text-slate-500">Sampai:</span>
                 <input
                   type="date"
                   value={toDate}
                   onChange={handleToDateChange}
-                  className="px-2 py-1 border border-slate-200 rounded-md text-xs text-slate-700 bg-white"
+                  className="bg-transparent text-xs text-main font-medium focus:outline-none cursor-pointer"
+                  title="Filter tanggal akhir peminjaman"
                 />
               </div>
 
-              <div className="relative">
-                <input
+              {/* Search Input with Lucide Search & Clear Button */}
+              <div className="relative w-full sm:w-60">
+                <Input
                   type="text"
                   placeholder="Cari nama, NIM, kode unit..."
                   value={searchQuery}
                   onChange={handleSearchChange}
-                  className="pl-8 pr-3 py-1.5 border border-slate-200 rounded-md text-xs w-48 sm:w-60 bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+                  leftIcon={<Search size={14} className="text-slate-400 shrink-0" />}
+                  rightIcon={
+                    searchQuery ? (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSearchQuery('');
+                          setCurrentPage(1);
+                        }}
+                        className="p-1 rounded text-slate-400 hover:text-slate-600 focus:outline-none"
+                        title="Hapus kata kunci pencarian"
+                      >
+                        <X size={13} />
+                      </button>
+                    ) : undefined
+                  }
+                  className="min-h-[38px] py-1.5 text-xs bg-surface border-borderline focus:border-brand-primary"
+                  containerClassName="w-full"
                 />
-                <svg
-                  className="w-3.5 h-3.5 text-slate-400 absolute left-2.5 top-2.5"
-                  fill="none"
-                  stroke="currentColor"
-                  viewBox="0 0 24 24"
-                >
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-                </svg>
               </div>
 
+              {/* Reset Button (when active) */}
               {(fromDate || toDate || searchQuery || statusFilter !== 'ALL') && (
-                <button
-                  type="button"
+                <Button
+                  variant="outline"
+                  size="sm"
                   onClick={handleResetFilters}
-                  className="text-xs text-slate-500 hover:text-slate-800 underline px-1"
+                  leftIcon={<RotateCcw size={13} className="text-slate-500 shrink-0" />}
+                  className="min-h-[38px] text-xs font-semibold text-slate-600 hover:text-navy-900 border-borderline"
                 >
                   Reset
-                </button>
+                </Button>
               )}
             </div>
           </div>
-        </div>
+
+          {/* Active Filter Chips */}
+          {(fromDate || toDate || searchQuery || statusFilter !== 'ALL') && (
+            <div className="flex flex-wrap items-center gap-2 pt-2.5 border-t border-borderline/60 text-xs">
+              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                <Filter size={12} className="text-slate-400" />
+                Filter Aktif:
+              </span>
+
+              {statusFilter !== 'ALL' && (
+                <Badge
+                  size="sm"
+                  variant={statusFilter === 'OVERDUE' ? 'danger' : 'primary'}
+                  className="gap-1.5 pl-2.5 pr-1.5 py-0.5"
+                >
+                  <span>
+                    Status:{' '}
+                    {statusFilter === 'ACTIVE'
+                      ? 'Sedang Dipinjam'
+                      : statusFilter === 'OVERDUE'
+                      ? 'Terlambat'
+                      : 'Selesai'}
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleStatusFilterChange('ALL')}
+                    className="p-0.5 rounded-full hover:bg-black/10 focus:outline-none"
+                    title="Hapus filter status"
+                  >
+                    <X size={11} />
+                  </button>
+                </Badge>
+              )}
+
+              {fromDate && (
+                <Badge size="sm" variant="neutral" className="gap-1.5 pl-2.5 pr-1.5 py-0.5">
+                  <span>Dari: {fromDate}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setFromDate('');
+                      setCurrentPage(1);
+                    }}
+                    className="p-0.5 rounded-full hover:bg-black/10 focus:outline-none"
+                    title="Hapus batas tanggal mulai"
+                  >
+                    <X size={11} />
+                  </button>
+                </Badge>
+              )}
+
+              {toDate && (
+                <Badge size="sm" variant="neutral" className="gap-1.5 pl-2.5 pr-1.5 py-0.5">
+                  <span>Sampai: {toDate}</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setToDate('');
+                      setCurrentPage(1);
+                    }}
+                    className="p-0.5 rounded-full hover:bg-black/10 focus:outline-none"
+                    title="Hapus batas tanggal akhir"
+                  >
+                    <X size={11} />
+                  </button>
+                </Badge>
+              )}
+
+              {searchQuery && (
+                <Badge size="sm" variant="neutral" className="gap-1.5 pl-2.5 pr-1.5 py-0.5">
+                  <span>Cari: &quot;{searchQuery}&quot;</span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCurrentPage(1);
+                    }}
+                    className="p-0.5 rounded-full hover:bg-black/10 focus:outline-none"
+                    title="Hapus kata kunci"
+                  >
+                    <X size={11} />
+                  </button>
+                </Badge>
+              )}
+
+              <button
+                type="button"
+                onClick={handleResetFilters}
+                className="text-[11px] font-semibold text-rose-600 hover:text-rose-700 hover:underline ml-1"
+              >
+                Hapus Semua Filter
+              </button>
+            </div>
+          )}
+        </Card>
 
         {/* Ledger Table Section (FR-11, Mobile & Desktop Responsive) */}
-        <div className="bg-white rounded-xl border border-slate-200 shadow-sm overflow-hidden">
+        <div className="bg-surface rounded-card border border-borderline shadow-sm overflow-hidden">
           {error && (
-            <div className="p-4 bg-rose-50 border-b border-rose-200 text-xs text-rose-700">
-              {error}
+            <div className="p-4 bg-rose-50 border-b border-rose-200 text-xs text-rose-700 flex items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <AlertTriangle size={16} className="shrink-0 text-rose-600" />
+                <span>{error}</span>
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => void fetchLoans()}
+                className="text-xs py-1 px-3 h-7 min-h-0 bg-white border-rose-300 text-rose-700 hover:bg-rose-100/70"
+              >
+                Coba Lagi
+              </Button>
             </div>
           )}
 
           {loading ? (
-            <div className="p-12 text-center text-sm text-slate-500">
-              <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-slate-300 border-t-blue-600 mb-2"></div>
-              <p>Memuat buku besar digital...</p>
+            <div className="p-12 sm:p-16 text-center text-sm text-slate-500 flex flex-col items-center justify-center space-y-3">
+              <LoadingSpinner size="lg" variant="primary" />
+              <p className="text-xs sm:text-sm font-medium text-slate-600">Memuat buku besar digital...</p>
             </div>
           ) : loans.length === 0 ? (
-            <div className="p-12 text-center text-sm text-slate-500">
-              <svg className="w-12 h-12 text-slate-300 mx-auto mb-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="font-medium text-slate-700">Tidak ada transaksi ditemukan</p>
-              <p className="text-xs text-slate-400 mt-1">Coba sesuaikan filter atau kata kunci pencarian Anda.</p>
+            <div className="p-6 sm:p-10">
+              <EmptyState
+                icon={<Layers size={24} className="text-brand-primary" />}
+                title="Tidak ada transaksi ditemukan"
+                description="Coba sesuaikan filter atau kata kunci pencarian Anda."
+                action={
+                  (fromDate || toDate || searchQuery || statusFilter !== 'ALL') ? (
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={handleResetFilters}
+                      leftIcon={<RotateCcw size={13} />}
+                    >
+                      Reset Filter
+                    </Button>
+                  ) : undefined
+                }
+              />
             </div>
           ) : (
             <>
@@ -1068,57 +1199,57 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               <div className="hidden md:block overflow-x-auto">
                 <table className="w-full min-w-[980px] text-left border-collapse text-xs">
                   <thead>
-                    <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-semibold uppercase tracking-wider text-[11px]">
-                      <th className="py-3 pl-4 pr-3 w-[155px]">Waktu Pinjam &amp; Batas</th>
-                      <th className="py-3 px-3 w-[135px]">Waktu Kembali</th>
-                      <th className="py-3 px-3 w-[150px]">Peminjam</th>
-                      <th className="py-3 px-3 w-[140px]">Kelas</th>
-                      <th className="py-3 px-3 w-[125px]">Proyektor</th>
-                      <th className="py-3 px-3 w-[105px] text-center">Dokumentasi</th>
-                      <th className="py-3 px-3 w-[130px]">Pengembali</th>
-                      <th className="py-3 px-3 w-[135px]">Petugas</th>
-                      <th className="py-3 pl-3 pr-6 text-center w-[125px]">Status</th>
+                    <tr className="bg-canvas border-b border-borderline text-slate-600 font-bold uppercase tracking-wider text-[11px]">
+                      <th className="py-3.5 pl-4 pr-3 w-[155px]">Waktu Pinjam &amp; Batas</th>
+                      <th className="py-3.5 px-3 w-[135px]">Waktu Kembali</th>
+                      <th className="py-3.5 px-3 w-[150px]">Peminjam</th>
+                      <th className="py-3.5 px-3 w-[140px]">Kelas</th>
+                      <th className="py-3.5 px-3 w-[125px]">Proyektor</th>
+                      <th className="py-3.5 px-3 w-[105px] text-center">Dokumentasi</th>
+                      <th className="py-3.5 px-3 w-[130px]">Pengembali</th>
+                      <th className="py-3.5 px-3 w-[135px]">Petugas</th>
+                      <th className="py-3.5 pl-3 pr-6 text-center w-[125px]">Status</th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-slate-100 text-slate-800">
+                  <tbody className="divide-y divide-borderline/70 text-main">
                     {loans.map((loan) => {
                       return (
-                        <tr key={loan.id} className="hover:bg-slate-50/80 transition" data-testid="desktop-loan-row">
+                        <tr key={loan.id} className="hover:bg-slate-50/70 transition-colors" data-testid="desktop-loan-row">
                           {/* Waktu Pinjam & Due At */}
-                          <td className="py-3 pl-4 pr-3 whitespace-nowrap">
-                            <p className="font-medium text-slate-900">{formatWib(loan.borrowed_at, 'short')}</p>
+                          <td className="py-3.5 pl-4 pr-3 whitespace-nowrap">
+                            <p className="font-semibold text-navy-900">{formatWib(loan.borrowed_at, 'short')}</p>
                             <div className="flex items-center gap-1.5 mt-0.5">
-                              <span className="text-[11px] text-slate-500">
+                              <span className="text-[11px] text-slate-500 font-medium">
                                 Batas: {formatWib(loan.due_at, 'time')}
                               </span>
                               {loan.is_overdue && (
-                                <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                                <Badge variant="danger" size="sm">
                                   Terlambat
-                                </span>
+                                </Badge>
                               )}
                             </div>
                           </td>
 
                           {/* Waktu Kembali */}
-                          <td className="py-3 px-3 whitespace-nowrap">
+                          <td className="py-3.5 px-3 whitespace-nowrap">
                             {loan.returned_at ? (
-                              <p className="text-slate-700 font-medium">{formatWib(loan.returned_at, 'short')}</p>
+                              <p className="text-slate-800 font-medium">{formatWib(loan.returned_at, 'short')}</p>
                             ) : (
                               <span className="text-slate-400 italic">Belum kembali</span>
                             )}
                           </td>
 
                           {/* Peminjam (Ketua Kelas) */}
-                          <td className="py-3 px-3">
-                            <p className="font-semibold text-slate-900 leading-tight">{loan.student?.name || '-'}</p>
+                          <td className="py-3.5 px-3">
+                            <p className="font-bold text-navy-900 leading-tight">{loan.student?.name || '-'}</p>
                             <p className="text-slate-500 text-[11px] font-mono mt-0.5">NIM {loan.student?.nim || '-'}</p>
                           </td>
 
                           {/* Kelas */}
-                          <td className="py-3 px-3">
+                          <td className="py-3.5 px-3">
                             {loan.class ? (
                               <div>
-                                <p className="font-medium text-slate-800 leading-tight">{loan.class.study_program}</p>
+                                <p className="font-semibold text-slate-800 leading-tight">{loan.class.study_program}</p>
                                 <p className="text-slate-500 text-[11px] mt-0.5">
                                   {loan.class.cohort_year} - Rombel {loan.class.section}
                                 </p>
@@ -1129,9 +1260,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                           </td>
 
                           {/* Proyektor */}
-                          <td className="py-3 px-3">
+                          <td className="py-3.5 px-3">
                             <div className="flex items-center gap-1.5">
-                              <span className="px-1.5 py-0.5 rounded bg-slate-100 font-mono text-[11px] font-bold text-slate-800 border border-slate-200 whitespace-nowrap">
+                              <span className="px-2 py-0.5 rounded bg-canvas font-mono text-[11px] font-bold text-navy-900 border border-borderline whitespace-nowrap">
                                 {loan.projector?.code || '-'}
                               </span>
                             </div>
@@ -1141,24 +1272,23 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                           </td>
 
                           {/* Dokumentasi Foto */}
-                          <td className="py-3 px-3 whitespace-nowrap text-center">
-                            <button
-                              type="button"
+                          <td className="py-3.5 px-3 whitespace-nowrap text-center">
+                            <Button
+                              variant="outline"
+                              size="sm"
                               onClick={() => openPhotoModal(loan)}
-                              className="inline-flex items-center gap-1 px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded text-xs font-medium transition"
+                              leftIcon={<Camera size={13} className="text-slate-500 shrink-0" />}
+                              className="text-xs py-1 px-2.5 min-h-[32px] font-medium border-borderline hover:bg-slate-50"
                             >
-                              <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                              </svg>
                               Lihat Foto
-                            </button>
+                            </Button>
                           </td>
 
                           {/* Pengembali */}
-                          <td className="py-3 px-3">
+                          <td className="py-3.5 px-3">
                             {loan.returned_by_type ? (
                               <div>
-                                <span className="text-slate-700 font-medium">
+                                <span className="text-slate-800 font-medium">
                                   {loan.returned_by_type === 'BORROWER' ? 'Peminjam Sendiri' : 'Perwakilan'}
                                 </span>
                                 {loan.returned_by_name && (
@@ -1173,35 +1303,35 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                           </td>
 
                           {/* Petugas */}
-                          <td className="py-3 px-3 text-[11px]">
+                          <td className="py-3.5 px-3 text-[11px]">
                             <p className="text-slate-700 truncate" title={loan.borrow_staff?.name || ''}>
-                              <span className="text-slate-400">Pinjam:</span> {loan.borrow_staff?.name || '-'}
+                              <span className="text-slate-400 font-medium">Pinjam:</span> {loan.borrow_staff?.name || '-'}
                             </p>
                             {loan.return_staff && (
                               <p className="text-slate-700 mt-0.5 truncate" title={loan.return_staff.name}>
-                                <span className="text-slate-400">Kembali:</span> {loan.return_staff.name}
+                                <span className="text-slate-400 font-medium">Kembali:</span> {loan.return_staff.name}
                               </p>
                             )}
                           </td>
 
                           {/* Status */}
-                          <td className="py-3 pl-3 pr-6 whitespace-nowrap text-center">
+                          <td className="py-3.5 pl-3 pr-6 whitespace-nowrap text-center">
                             {loan.status === 'ACTIVE' ? (
-                              <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                              <Badge variant="primary" dot size="sm">
                                 Dipinjam
-                              </span>
+                              </Badge>
                             ) : loan.return_condition === 'REPORTED_ISSUE' ? (
                               loan.damage_notes ? (
                                 <DamageNotesTooltip notes={loan.damage_notes} />
                               ) : (
-                                <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                                <Badge variant="warning" dot size="sm">
                                   Ada Kendala
-                                </span>
+                                </Badge>
                               )
                             ) : (
-                              <span className="inline-flex items-center justify-center px-2.5 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                              <Badge variant="success" dot size="sm">
                                 Selesai
-                              </span>
+                              </Badge>
                             )}
                           </td>
                         </tr>
@@ -1212,51 +1342,51 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               </div>
 
               {/* Mobile View: Transaction Cards (Optimized for Small Screens) */}
-              <div className="block md:hidden divide-y divide-slate-100" data-testid="mobile-loans-list">
+              <div className="block md:hidden divide-y divide-borderline" data-testid="mobile-loans-list">
                 {loans.map((loan) => (
-                  <div key={loan.id} className="p-4 space-y-3 hover:bg-slate-50/50 transition" data-testid="mobile-loan-card">
+                  <div key={loan.id} className="p-4 space-y-3 hover:bg-slate-50/50 transition-colors" data-testid="mobile-loan-card">
                     {/* Header: Proyektor & Status */}
                     <div className="flex items-start justify-between gap-2">
                       <div>
                         <div className="flex items-center gap-1.5">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 font-mono text-xs font-bold text-slate-800 border border-slate-200">
+                          <span className="px-2 py-0.5 rounded bg-canvas font-mono text-xs font-bold text-navy-900 border border-borderline">
                             {loan.projector?.code || '-'}
                           </span>
-                          <span className="text-xs font-semibold text-slate-900 truncate max-w-[150px]">
+                          <span className="text-xs font-bold text-main truncate max-w-[150px]">
                             {loan.projector?.name || '-'}
                           </span>
                         </div>
                         <p className="text-[11px] text-slate-500 mt-1">
-                          Pinjam: {formatWib(loan.borrowed_at, 'short')}
+                          Pinjam: <span className="font-medium text-slate-700">{formatWib(loan.borrowed_at, 'short')}</span>
                         </p>
                       </div>
 
                       <div className="flex flex-col items-end gap-1">
                         {loan.status === 'ACTIVE' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-100 text-blue-800">
+                          <Badge variant="primary" dot size="sm">
                             Dipinjam
-                          </span>
+                          </Badge>
                         ) : loan.return_condition === 'REPORTED_ISSUE' ? (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-amber-100 text-amber-800">
+                          <Badge variant="warning" dot size="sm">
                             Ada Kendala
-                          </span>
+                          </Badge>
                         ) : (
-                          <span className="inline-flex items-center px-2 py-0.5 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800">
+                          <Badge variant="success" dot size="sm">
                             Selesai
-                          </span>
+                          </Badge>
                         )}
                         {loan.is_overdue && (
-                          <span className="inline-flex items-center px-1.5 py-0.2 rounded text-[10px] font-semibold bg-rose-100 text-rose-700 border border-rose-200">
+                          <Badge variant="danger" size="sm">
                             Terlambat
-                          </span>
+                          </Badge>
                         )}
                       </div>
                     </div>
 
                     {/* Borrower & Class */}
-                    <div className="p-2.5 bg-slate-50 border border-slate-100 rounded-lg text-xs space-y-1">
+                    <div className="p-2.5 bg-canvas border border-borderline rounded-element text-xs space-y-1">
                       <div className="flex items-center justify-between">
-                        <span className="font-semibold text-slate-900">{loan.student?.name || '-'}</span>
+                        <span className="font-bold text-navy-900">{loan.student?.name || '-'}</span>
                         <span className="text-slate-500 font-mono text-[11px]">NIM {loan.student?.nim || '-'}</span>
                       </div>
                       {loan.class && (
@@ -1268,13 +1398,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
                     {/* Timing: Batas & Waktu Kembali */}
                     <div className="grid grid-cols-2 gap-2 text-[11px] text-slate-600">
-                      <div className="p-2 bg-slate-50/70 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 block text-[10px]">Batas Kembali:</span>
-                        <span className="font-medium text-slate-800">{formatWib(loan.due_at, 'time')}</span>
+                      <div className="p-2 bg-canvas/80 rounded-element border border-borderline">
+                        <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">Batas Kembali:</span>
+                        <span className="font-bold text-navy-900">{formatWib(loan.due_at, 'time')}</span>
                       </div>
-                      <div className="p-2 bg-slate-50/70 rounded-lg border border-slate-100">
-                        <span className="text-slate-400 block text-[10px]">Waktu Kembali:</span>
-                        <span className="font-medium text-slate-800">
+                      <div className="p-2 bg-canvas/80 rounded-element border border-borderline">
+                        <span className="text-slate-400 block text-[10px] font-semibold uppercase tracking-wider">Waktu Kembali:</span>
+                        <span className="font-bold text-navy-900">
                           {loan.returned_at ? formatWib(loan.returned_at, 'short') : 'Belum kembali'}
                         </span>
                       </div>
@@ -1284,14 +1414,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                     <div className="text-[11px] text-slate-500 space-y-0.5">
                       {loan.returned_by_name && (
                         <p>
-                          <span className="text-slate-400">Pengembali:</span>{' '}
-                          <span className="font-medium text-slate-700">
+                          <span className="text-slate-400 font-medium">Pengembali:</span>{' '}
+                          <span className="font-semibold text-slate-700">
                             {loan.returned_by_name} ({loan.returned_by_type === 'BORROWER' ? 'Peminjam' : 'Perwakilan'})
                           </span>
                         </p>
                       )}
                       <p>
-                        <span className="text-slate-400">Petugas:</span>{' '}
+                        <span className="text-slate-400 font-medium">Petugas:</span>{' '}
                         <span>Pinjam: {loan.borrow_staff?.name || '-'}</span>
                         {loan.return_staff && <span> • Kembali: {loan.return_staff.name}</span>}
                       </p>
@@ -1299,14 +1429,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
                     {/* Catatan Kendala Mobile (Dapat dibaca langsung tanpa hover) */}
                     {loan.return_condition === 'REPORTED_ISSUE' && loan.damage_notes && (
-                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-lg text-xs space-y-1">
-                        <div className="flex items-center gap-1.5 font-semibold text-amber-800">
-                          <svg className="w-3.5 h-3.5 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                          </svg>
+                      <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-element text-xs space-y-1">
+                        <div className="flex items-center gap-1.5 font-bold text-amber-900">
+                          <AlertTriangle size={14} className="shrink-0 text-amber-700" />
                           <span>Catatan Kendala:</span>
                         </div>
-                        <p className="text-amber-900 leading-relaxed break-words" data-testid="mobile-damage-notes">
+                        <p className="text-amber-900 leading-relaxed break-words font-medium" data-testid="mobile-damage-notes">
                           {loan.damage_notes}
                         </p>
                       </div>
@@ -1314,16 +1442,15 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
                     {/* Action button: Lihat Foto (Touch Friendly) */}
                     <div className="pt-1">
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => openPhotoModal(loan)}
-                        className="w-full py-2 px-3 bg-slate-100 hover:bg-slate-200 active:bg-slate-300 text-slate-700 rounded-lg text-xs font-semibold transition flex items-center justify-center gap-1.5 shadow-sm min-h-[38px]"
+                        leftIcon={<Camera size={14} className="text-slate-500 shrink-0" />}
+                        className="w-full justify-center min-h-[38px] text-xs font-semibold border-borderline hover:bg-slate-50 shadow-xs"
                       >
-                        <svg className="w-3.5 h-3.5 text-slate-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14m-6-6h.01M6 20h12a2 2 0 002-2V6a2 2 0 00-2-2H6a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                        </svg>
                         Lihat Foto Dokumentasi
-                      </button>
+                      </Button>
                     </div>
                   </div>
                 ))}
@@ -1333,7 +1460,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               {totalCount > 0 && (
                 <div
                   data-testid="pagination-bar"
-                  className="px-4 py-3 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                  className="px-4 py-3 bg-canvas border-t border-borderline flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
                 >
                   <div className="text-slate-600 text-center sm:text-left">
                     Menampilkan <span className="font-semibold text-slate-900">{(currentPage - 1) * pageSize + 1}</span>
@@ -1341,16 +1468,18 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                     {' '}dari <span className="font-semibold text-slate-900">{totalCount}</span> transaksi
                   </div>
 
-                  <div className="flex items-center justify-center gap-1">
-                    <button
-                      type="button"
+                  <div className="flex items-center justify-center gap-1.5">
+                    <Button
+                      variant="outline"
+                      size="sm"
                       data-testid="pagination-prev"
                       onClick={() => setCurrentPage((prev) => Math.max(prev - 1, 1))}
                       disabled={currentPage <= 1 || loading}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+                      leftIcon={<ChevronLeft size={14} className="shrink-0" />}
+                      className="h-8 px-2.5 text-xs font-semibold border-borderline disabled:opacity-40"
                     >
-                      ← Sebelumnya
-                    </button>
+                      Sebelumnya
+                    </Button>
 
                     <div className="flex items-center gap-1">
                       {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1366,17 +1495,17 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                           return (
                             <React.Fragment key={pageNum}>
                               {showEllipsis && (
-                                <span className="px-1 text-slate-400">…</span>
+                                <span className="px-1 text-slate-400 font-bold select-none">…</span>
                               )}
                               <button
                                 type="button"
                                 data-testid={`pagination-page-${pageNum}`}
                                 onClick={() => setCurrentPage(pageNum)}
                                 disabled={loading}
-                                className={`min-w-[32px] h-8 px-2 text-xs font-semibold rounded-lg border transition ${
+                                className={`min-w-[32px] h-8 px-2 text-xs font-bold rounded-element border transition-all ${
                                   currentPage === pageNum
-                                    ? 'bg-blue-600 text-white border-blue-600 shadow-sm'
-                                    : 'bg-white border-slate-300 text-slate-700 hover:bg-slate-50'
+                                    ? 'bg-navy-900 text-white border-navy-900 shadow-sm'
+                                    : 'bg-surface border-borderline text-main hover:bg-slate-100 hover:text-navy-900'
                                 }`}
                               >
                                 {pageNum}
@@ -1386,15 +1515,17 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                         })}
                     </div>
 
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="sm"
                       data-testid="pagination-next"
                       onClick={() => setCurrentPage((prev) => Math.min(prev + 1, totalPages))}
                       disabled={currentPage >= totalPages || loading}
-                      className="px-2.5 py-1.5 rounded-lg border border-slate-300 bg-white font-medium text-slate-700 hover:bg-slate-50 disabled:opacity-40 disabled:cursor-not-allowed transition shadow-sm"
+                      rightIcon={<ChevronRight size={14} className="shrink-0" />}
+                      className="h-8 px-2.5 text-xs font-semibold border-borderline disabled:opacity-40"
                     >
-                      Berikutnya →
-                    </button>
+                      Berikutnya
+                    </Button>
                   </div>
                 </div>
               )}
@@ -1456,16 +1587,21 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                 <p>Membuat signed URL aman untuk foto (berlaku 60 detik)...</p>
               </div>
             ) : (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4 items-stretch">
                 {/* 1. Foto Wajah Referensi */}
-                <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">1. Foto Profil Terverifikasi</span>
-                    <span className="text-[10px] bg-indigo-100 text-indigo-700 px-1.5 py-0.5 rounded font-semibold">
+                <div className="flex flex-col p-3.5 bg-canvas rounded-card border border-borderline">
+                  {/* Header dengan min-h konsisten agar posisi bagian atas foto sejajar horizontal */}
+                  <div className="flex items-start justify-between gap-2 min-h-[40px] md:min-h-[44px] mb-2.5">
+                    <span className="text-xs font-bold text-navy-900 leading-snug">
+                      1. Foto Profil Terverifikasi
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-navy-50 text-navy-800 border border-navy-200/80 whitespace-nowrap">
                       Referensi
                     </span>
                   </div>
-                  <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative">
+
+                  {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
+                  <div className="aspect-[3/4] w-full bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative mb-2.5 shadow-xs border border-borderline/60">
                     {photoUrls.faceUrl ? (
                       <img
                         src={photoUrls.faceUrl}
@@ -1478,20 +1614,27 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                       </div>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 text-center">
+
+                  {/* Keterangan foto di bagian bawah kartu */}
+                  <p className="text-[11px] text-slate-500 text-center leading-normal mt-auto">
                     Foto tersimpan di database profil ketua kelas saat registrasi.
                   </p>
                 </div>
 
                 {/* 2. Foto Saat Peminjaman */}
-                <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">2. Foto Serah Terima Pinjam</span>
-                    <span className="text-[10px] bg-blue-100 text-blue-700 px-1.5 py-0.5 rounded font-semibold">
+                <div className="flex flex-col p-3.5 bg-canvas rounded-card border border-borderline">
+                  {/* Header dengan min-h konsisten agar posisi bagian atas foto sejajar horizontal */}
+                  <div className="flex items-start justify-between gap-2 min-h-[40px] md:min-h-[44px] mb-2.5">
+                    <span className="text-xs font-bold text-navy-900 leading-snug">
+                      2. Foto Serah Terima Pinjam
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
                       Kiosk Meja TU
                     </span>
                   </div>
-                  <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative">
+
+                  {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
+                  <div className="aspect-[3/4] w-full bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative mb-2.5 shadow-xs border border-borderline/60">
                     {photoUrls.borrowUrl ? (
                       <img
                         src={photoUrls.borrowUrl}
@@ -1504,20 +1647,27 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                       </div>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 text-center">
+
+                  {/* Keterangan foto di bagian bawah kartu */}
+                  <p className="text-[11px] text-slate-500 text-center leading-normal mt-auto">
                     Diambil langsung via kamera Kiosk saat QR Pass diverifikasi.
                   </p>
                 </div>
 
                 {/* 3. Foto Saat Pengembalian */}
-                <div className="space-y-2 p-3 bg-slate-50 rounded-xl border border-slate-200">
-                  <div className="flex items-center justify-between">
-                    <span className="text-xs font-bold text-slate-700">3. Foto Serah Terima Kembali</span>
-                    <span className="text-[10px] bg-emerald-100 text-emerald-700 px-1.5 py-0.5 rounded font-semibold">
+                <div className="flex flex-col p-3.5 bg-canvas rounded-card border border-borderline">
+                  {/* Header dengan min-h konsisten agar posisi bagian atas foto sejajar horizontal */}
+                  <div className="flex items-start justify-between gap-2 min-h-[40px] md:min-h-[44px] mb-2.5">
+                    <span className="text-xs font-bold text-navy-900 leading-snug">
+                      3. Foto Serah Terima Kembali
+                    </span>
+                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
                       Kiosk Meja TU
                     </span>
                   </div>
-                  <div className="aspect-[3/4] bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative">
+
+                  {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
+                  <div className="aspect-[3/4] w-full bg-slate-200 rounded-lg overflow-hidden flex items-center justify-center relative mb-2.5 shadow-xs border border-borderline/60">
                     {photoUrls.returnUrl ? (
                       <img
                         src={photoUrls.returnUrl}
@@ -1530,7 +1680,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                       </div>
                     )}
                   </div>
-                  <p className="text-[11px] text-slate-500 text-center">
+
+                  {/* Keterangan foto di bagian bawah kartu */}
+                  <p className="text-[11px] text-slate-500 text-center leading-normal mt-auto">
                     Diambil oleh petugas Kiosk saat unit proyektor dikembalikan.
                   </p>
                 </div>
