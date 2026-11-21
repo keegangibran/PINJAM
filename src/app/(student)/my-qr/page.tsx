@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
 
 interface QrData {
@@ -330,11 +331,20 @@ export default function MyQrPassPage() {
             <p className="text-xs text-slate-600 leading-relaxed">{error.message}</p>
 
             {error.code === 'ACCOUNT_NOT_ACTIVE' && (
-              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-left text-xs text-blue-800">
-                <p className="font-semibold mb-1">Menunggu Verifikasi Tatap Muka:</p>
-                <p>
-                  Silakan kunjungi loket Tata Usaha (TU) dengan membawa KTM fisik atau KTP asli Anda untuk menyelesaikan verifikasi identitas ketua kelas.
+              <div className="p-3 bg-blue-50 border border-blue-100 rounded-xl text-left text-xs text-blue-800 space-y-2">
+                <p className="font-semibold">Pendaftaran Sedang Berlangsung / Menunggu Verifikasi:</p>
+                <p className="leading-relaxed">
+                  Akun Anda belum berstatus aktif. Pastikan Anda telah melengkapi foto wajah referensi dan foto kartu identitas (KTM/KTP) secara mandiri atau memeriksa catatan perbaikan dari admin.
                 </p>
+                <div className="pt-1">
+                  <Link
+                    href="/register"
+                    className="inline-flex items-center gap-1 px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-semibold shadow-sm transition-colors"
+                  >
+                    <span>Lengkapi / Periksa Foto Pendaftaran</span>
+                    <span>→</span>
+                  </Link>
+                </div>
               </div>
             )}
 

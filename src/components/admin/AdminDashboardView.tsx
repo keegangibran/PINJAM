@@ -732,11 +732,14 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               </Link>
               <Link
                 href="/kiosk"
+                target="_blank"
+                rel="noopener noreferrer"
                 title="Buka antarmuka pemindaian Kiosk meja TU"
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element bg-slate-900 hover:bg-navy-900 text-white text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
               >
                 <QrCode size={14} aria-hidden="true" className="text-brand-secondary shrink-0" />
                 <span className="truncate">Buka Kiosk</span>
+                <ArrowUpRight size={12} className="text-slate-400 shrink-0" />
               </Link>
             </div>
 

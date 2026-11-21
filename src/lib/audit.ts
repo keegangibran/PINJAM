@@ -4,6 +4,7 @@ import { SupabaseClient } from '@supabase/supabase-js';
  * Daftar tindakan audit sistem yang diwajibkan oleh PRD Revisi 3 (FR-19).
  */
 export type AuditAction =
+  | 'STUDENT_VERIFICATION_SUBMITTED'
   | 'VERIFICATION_DECIDED'
   | 'LEADER_CLAIM_DECIDED'
   | 'LEADER_TRANSFERRED'

@@ -101,6 +101,14 @@ export default function AdminVerificationsPage() {
               studentId={selectedStudent.id}
               studentName={selectedStudent.name}
               studentNim={selectedStudent.nim}
+              studentEmail={selectedStudent.email}
+              studentClass={
+                selectedStudent.current_class
+                  ? `${selectedStudent.current_class.study_program} — Angkatan ${selectedStudent.current_class.cohort_year} (${selectedStudent.current_class.section}) ${selectedStudent.current_class.academic_term}`
+                  : undefined
+              }
+              studentRegistrationStatus={selectedStudent.registration_status}
+              documentType={selectedStudent.verification_document_type as 'KTM' | 'KTP' | null}
               existingFacePath={selectedStudent.profile_photo_path}
               existingDocPath={selectedStudent.verification_document_path}
               onDecisionSubmitted={() => {

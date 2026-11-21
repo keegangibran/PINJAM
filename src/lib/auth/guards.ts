@@ -6,6 +6,7 @@ export interface UserAuthContext {
   userId: string;
   email: string;
   role: 'STUDENT' | 'STAFF' | 'ADMIN';
+  emailConfirmed?: boolean;
   staffProfile?: {
     id: string;
     name: string;
@@ -44,6 +45,8 @@ export async function getCurrentUserContext(): Promise<UserAuthContext | null> {
     return null;
   }
 
+  const isEmailConfirmed = Boolean(user.email_confirmed_at || (user as { confirmed_at?: string }).confirmed_at);
+
   // Gunakan adminClient untuk memeriksa profil pengguna secara aman
   const adminClient = createAdminClient();
 
@@ -59,6 +62,7 @@ export async function getCurrentUserContext(): Promise<UserAuthContext | null> {
       userId: user.id,
       email: user.email ?? '',
       role: staff.role as 'STAFF' | 'ADMIN',
+      emailConfirmed: isEmailConfirmed,
       staffProfile: {
         id: staff.id,
         name: staff.name,
@@ -81,6 +85,7 @@ export async function getCurrentUserContext(): Promise<UserAuthContext | null> {
       userId: user.id,
       email: user.email ?? '',
       role: 'STUDENT',
+      emailConfirmed: isEmailConfirmed,
       staffProfile: null,
       studentProfile: {
         id: student.id,
@@ -97,6 +102,7 @@ export async function getCurrentUserContext(): Promise<UserAuthContext | null> {
     userId: user.id,
     email: user.email ?? '',
     role: 'STUDENT',
+    emailConfirmed: isEmailConfirmed,
     staffProfile: null,
     studentProfile: null,
   };

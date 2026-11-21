@@ -86,7 +86,21 @@ export async function PATCH(
       );
     }
 
-    // 2. Jika APPROVE, periksa kembali partial unique index: tidak boleh ada akun ACTIVE lain dengan NIM yang sama
+    // 2. Cegah modifikasi jika mahasiswa sudah dalam status final / tidak dapat diubah
+    const modifiableStatuses = ['PENDING_REVIEW', 'PENDING_DOCUMENT', 'RESUBMISSION_REQUIRED', 'PENDING_VERIFICATION'];
+    if (!modifiableStatuses.includes(student.registration_status)) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'CONFLICT_ALREADY_DECIDED',
+            message: `Status pendaftaran mahasiswa saat ini adalah ${student.registration_status} dan tidak dapat diubah lagi.`,
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    // 3. Jika APPROVE, periksa kembali partial unique index: tidak boleh ada akun ACTIVE lain dengan NIM yang sama
     if (decision === 'APPROVE') {
       const { data: existingActive } = await adminClient
         .from('students')
@@ -109,6 +123,31 @@ export async function PATCH(
       }
     }
 
+    // 4. PENGHAPUSAN INSTAN FOTO DOKUMEN IDENTITAS (NFR-08 & FR-01C)
+    // Upayakan penghapusan file KTM/KTP dari storage terlebih dahulu
+    let documentDeleted = false;
+    let storageErrorMsg: string | null = null;
+
+    if (student.verification_document_path) {
+      try {
+        const { error: storageErr } = await adminClient.storage
+          .from('smartprojex-media')
+          .remove([student.verification_document_path]);
+
+        if (!storageErr || storageErr.message?.toLowerCase().includes('not found')) {
+          documentDeleted = true;
+        } else {
+          storageErrorMsg = storageErr.message;
+          console.warn(`Storage document removal failed for student ${student.id}:`, storageErr.message);
+        }
+      } catch (storageException: unknown) {
+        storageErrorMsg = storageException instanceof Error ? storageException.message : String(storageException);
+        console.warn(`Storage document removal exception for student ${student.id}:`, storageErrorMsg);
+      }
+    } else {
+      documentDeleted = true;
+    }
+
     const newStatus =
       decision === 'APPROVE'
         ? 'ACTIVE'
@@ -118,8 +157,10 @@ export async function PATCH(
 
     const now = new Date().toISOString();
 
-    // 3. Perbarui baris students
-    const { error: updateError } = await adminClient
+    // 5. Perbarui baris students dengan Optimistic Concurrency Control
+    // Jika penghapusan storage berhasil, kosongkan verification_document_path.
+    // Jika gagal, TETAP simpan path agar retensi terjadwal (retention.ts) dapat membersihkannya nanti.
+    const { data: updatedRows, error: updateError } = await adminClient
       .from('students')
       .update({
         registration_status: newStatus,
@@ -127,10 +168,12 @@ export async function PATCH(
         verification_notes: notes || null,
         verified_by: staff.staffProfile?.id,
         verified_at: now,
-        verification_document_path: null, // Dikosongkan dari DB setelah berkas dihapus
+        verification_document_path: documentDeleted ? null : student.verification_document_path,
         updated_at: now,
       })
-      .eq('id', student.id);
+      .eq('id', student.id)
+      .eq('registration_status', student.registration_status)
+      .select('id');
 
     if (updateError) {
       return NextResponse.json(
@@ -139,7 +182,19 @@ export async function PATCH(
       );
     }
 
-    // 4. Jika disetujui (APPROVE), tangani klaim ketua kelas (FR-01D)
+    if (!updatedRows || updatedRows.length === 0) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'CONFLICT_ALREADY_DECIDED',
+            message: 'Status pendaftaran mahasiswa telah diperbarui oleh petugas lain.',
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    // 6. Jika disetujui (APPROVE), tangani klaim ketua kelas (FR-01D)
     if (decision === 'APPROVE' && student.current_class_id) {
       // Ambil klaim calon ketua awal (INITIAL) milik mahasiswa ini
       const { data: initialClaim } = await adminClient
@@ -201,19 +256,7 @@ export async function PATCH(
         .eq('status', 'PENDING');
     }
 
-    // 5. PENGHAPUSAN INSTAN FOTO DOKUMEN IDENTITAS (NFR-08 & FR-01C)
-    // Foto KTM/KTP wajib dihapus segera dari storage setelah keputusan dibuat
-    if (student.verification_document_path) {
-      try {
-        await adminClient.storage
-          .from('smartprojex-media')
-          .remove([student.verification_document_path]);
-      } catch (storageErr) {
-        console.error('Failed to remove document photo immediately:', storageErr);
-      }
-    }
-
-    // 6. Catat entri audit log keputusan verifikasi (FR-19)
+    // 7. Catat entri audit log keputusan verifikasi (FR-19)
     await recordAuditLog(adminClient, {
       action: 'VERIFICATION_DECIDED',
       entityType: 'students',
@@ -224,7 +267,9 @@ export async function PATCH(
         decision,
         checks,
         notes: notes || null,
-        document_photo_deleted: true,
+        document_photo_deleted: documentDeleted,
+        document_photo_cleanup_pending: !documentDeleted,
+        ...(storageErrorMsg ? { document_deletion_error: storageErrorMsg } : {}),
       },
     });
 
@@ -234,6 +279,8 @@ export async function PATCH(
       data: {
         student_id: student.id,
         new_status: newStatus,
+        document_photo_deleted: documentDeleted,
+        cleanup_pending: !documentDeleted,
       },
     });
   } catch (err: any) {

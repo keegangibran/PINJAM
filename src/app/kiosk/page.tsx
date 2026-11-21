@@ -3,6 +3,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import Link from 'next/link';
+import { Maximize, Minimize } from 'lucide-react';
 import QrScannerBox, { type QrScannerBoxHandle } from '@/components/kiosk/QrScannerBox';
 import {
   canSubmitKioskTransaction,
@@ -81,6 +82,56 @@ export default function KioskPage() {
   // 30s Inactivity Auto-Reset
   const [inactivityTimer, setInactivityTimer] = useState<number>(30);
   const lastActivityRef = useRef<number>(Date.now());
+
+  // Fullscreen state (Kiosk Monitor Kedua & Fullscreen API)
+  const [isFullscreen, setIsFullscreen] = useState(false);
+  const [fullscreenSupported, setFullscreenSupported] = useState(true);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      const active = Boolean(
+        document.fullscreenElement ||
+        (document as any).webkitFullscreenElement
+      );
+      setIsFullscreen(active);
+    };
+
+    if (
+      typeof document !== 'undefined' &&
+      !document.fullscreenEnabled &&
+      !(document as any).webkitFullscreenEnabled
+    ) {
+      setFullscreenSupported(false);
+    }
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    document.addEventListener('webkitfullscreenchange', handleFullscreenChange);
+
+    return () => {
+      document.removeEventListener('fullscreenchange', handleFullscreenChange);
+      document.removeEventListener('webkitfullscreenchange', handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = async () => {
+    try {
+      if (!document.fullscreenElement && !(document as any).webkitFullscreenElement) {
+        if (document.documentElement.requestFullscreen) {
+          await document.documentElement.requestFullscreen();
+        } else if ((document.documentElement as any).webkitRequestFullscreen) {
+          await (document.documentElement as any).webkitRequestFullscreen();
+        }
+      } else {
+        if (document.exitFullscreen) {
+          await document.exitFullscreen();
+        } else if ((document as any).webkitExitFullscreen) {
+          await (document as any).webkitExitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn('Mode layar penuh tidak dapat diaktifkan atau diblokir oleh peramban:', err);
+    }
+  };
 
   const clearCountdownTimer = useCallback(() => {
     if (countdownTimerRef.current !== null) {
@@ -546,12 +597,26 @@ export default function KioskPage() {
             Reset Sesi
           </button>
 
-          <Link
-            href="/admin"
-            className="px-3 py-1.5 rounded-xl bg-slate-800 text-xs text-slate-300 hover:bg-slate-700 hover:text-white transition-colors"
-          >
-            Panel Admin
-          </Link>
+          {fullscreenSupported && (
+            <button
+              type="button"
+              onClick={toggleFullscreen}
+              title={isFullscreen ? 'Keluar dari mode layar penuh' : 'Tampilkan Kiosk dalam mode layar penuh (Monitor Kedua)'}
+              className="px-3 py-1.5 rounded-xl border border-slate-700 bg-slate-900 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors flex items-center gap-1.5"
+            >
+              {isFullscreen ? (
+                <>
+                  <Minimize size={13} className="text-blue-400" />
+                  <span className="hidden sm:inline">Keluar Layar Penuh</span>
+                </>
+              ) : (
+                <>
+                  <Maximize size={13} className="text-blue-400" />
+                  <span className="hidden sm:inline">Layar Penuh</span>
+                </>
+              )}
+            </button>
+          )}
         </div>
       </div>
 

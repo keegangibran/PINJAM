@@ -95,15 +95,15 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
 ### 3.1 Functional
 | ID | Requirement (spesifik dan bisa diuji) | Peran |
 |----|---------------------------------------|-------|
-| FR-01 | Mahasiswa dapat mendaftar dengan Nama Lengkap, NIM, email, dan memilih kelas dari daftar baku melalui Supabase Auth; akun wajib menyelesaikan verifikasi email. Setelah email terverifikasi, status menjadi `PENDING_DOCUMENT`. | Mahasiswa |
-| FR-01A | Setelah email terverifikasi, mahasiswa datang ke sesi verifikasi tatap muka di TU. Petugas mengambil foto wajah referensi dan foto dokumen identitas (KTM atau KTP, setara) memakai kamera perangkat petugas, dengan persetujuan eksplisit mahasiswa. | Petugas TU |
-| FR-01B | Petugas mencocokkan secara manual: (a) wajah mahasiswa dengan foto pada dokumen, (b) nama pada dokumen dengan nama registrasi, dan (c) status mahasiswa/ketua kelas melalui cara yang ditentukan TU. Hasil tiga pemeriksaan dicatat sebagai centang pada keputusan. Sistem tidak menjalankan OCR dan tidak menyimpan NIK atau teks hasil baca dokumen. | Petugas TU |
-| FR-01C | Petugas dapat menyetujui, menolak dengan alasan, atau meminta pengambilan ulang foto. Hanya akun yang disetujui yang berstatus `ACTIVE`. Foto dokumen dihapus segera setelah keputusan dibuat. | Petugas TU |
+| FR-01 | Mahasiswa dapat mendaftar dengan Nama Lengkap, NIM, email, kata sandi, dan memilih kelas dari daftar baku melalui Supabase Auth; akun wajib menyelesaikan verifikasi email sebelum melanjutkan proses verifikasi. | Mahasiswa |
+| FR-01A | Mahasiswa mengambil foto wajah referensi dan foto dokumen identitas (KTM atau KTP, perlakuan setara) secara mandiri memakai kamera perangkat masing-masing (dilarang unggah dari galeri). Sistem menyediakan deteksi wajah (*face detection*) semata-mata sebagai panduan *framing* visual (keberadaan wajah, posisi tengah, dan jarak ideal), tanpa *facial recognition* atau biometrik otomatis. Seluruh gambar dan pratinjau kamera diproses secara normal tanpa efek mirror / pembalikan horizontal. Setelah foto dikirim, status pendaftaran menjadi `PENDING_REVIEW`. | Mahasiswa / Sistem |
+| FR-01B | Petugas Admin/TU memeriksa permohonan mahasiswa secara manual di halaman verifikasi dengan mencocokkan: (a) kesesuaian visual wajah mahasiswa pada foto dengan foto pada dokumen identitas, (b) nama pada dokumen identitas dengan nama registrasi, dan (c) kesesuaian kelas serta konfirmasi kelayakan sebagai ketua kelas. Hasil tiga pemeriksaan dicatat sebagai centang pada keputusan. Sistem tidak menjalankan OCR dan tidak menyimpan NIK atau teks hasil baca dokumen. | Petugas TU / Admin |
+| FR-01C | Petugas Admin/TU memutuskan pendaftaran: **Approve** (status menjadi `ACTIVE`), **Reject** (status menjadi `REJECTED`, wajib menyertakan alasan penolakan), atau **Request Resubmission** (status menjadi `RESUBMISSION_REQUIRED`, wajib menyertakan instruksi perbaikan). Pada seluruh keputusan, foto dokumen identitas dihapus secara permanen dari Supabase Storage segera setelah keputusan dibuat. Foto wajah referensi tetap disimpan selama akun aktif sesuai kebijakan retensi. | Petugas TU / Admin |
 | FR-01D | **Klaim ketua kelas**: pendaftar pertama pada kelas yang belum memiliki ketua menjadi calon ketua (klaim `INITIAL`, `PENDING`) dan disetujui petugas bersamaan dengan verifikasi. Pendaftar berikutnya pada kelas yang sudah memiliki ketua membuat klaim `REPLACEMENT` yang tidak berlaku otomatis dan harus diputuskan petugas. | Mahasiswa / Petugas TU |
 | FR-01E | Ketua kelas aktif dapat mengalihkan jabatan ke mahasiswa berstatus `ACTIVE` pada kelas yang sama. Pengalihan berlaku seketika, mencabut QR ketua lama, dan tercatat di audit log. | Mahasiswa |
 | FR-01F | Pada pergantian semester, kelas semester baru dibuat admin tanpa ketua. Mahasiswa `ACTIVE` mengklaim ulang kelasnya tanpa foto ulang; klaim tetap disetujui petugas. | Mahasiswa / Petugas TU / Admin |
 | FR-02 | Sistem menampilkan QR Pass hanya untuk akun `ACTIVE` yang menjadi ketua aktif sebuah kelas pada semester berjalan. Isi QR adalah token bertanda tangan berumur 60 detik yang diperbarui otomatis di layar dan tidak memuat NIM. Mahasiswa dapat mencabut QR (menaikkan versi token) kapan saja. | Sistem / Mahasiswa |
-| FR-03 | Halaman Kiosk dapat menyalakan webcam laptop dan memindai QR secara terus-menerus tanpa perlu refresh halaman. | Petugas / Kiosk |
+| FR-03 | Halaman Kiosk dibuka pada tab terpisah (`target="_blank"`) dari Dashboard Admin agar dashboard tetap aktif dan dapat dipindahkan ke monitor kedua melalui sistem operasi. Kiosk dapat menyalakan webcam laptop, memindai QR secara terus-menerus tanpa refresh, menyediakan kontrol mode layar penuh (Fullscreen API), dan beroperasi secara terisolasi tanpa memuat navigasi atau menu pengelolaan admin. | Petugas / Kiosk |
 | FR-04 | Setelah QR mahasiswa dan QR unit valid terbaca, sistem menampilkan identitas keduanya, lalu mengambil foto dokumentasi dengan hitung mundur dan pratinjau yang dapat diulang. Pada peminjaman, foto memperlihatkan orang yang mengambil bersama unit proyektor. | Kiosk |
 | FR-05 | Saat QR proyektor valid terbaca, sistem menampilkan identitas unit, status inventarisnya, dan, jika `BORROWED`, peminjam aktif beserta `due_at`. | Kiosk |
 | FR-06 | Jika unit `AVAILABLE`, sistem menampilkan ringkasan peminjaman beserta `due_at` dan dua pilihan: "Kondisi terlihat normal" atau "Laporkan kendala". Pilihan normal membuat transaksi `ACTIVE` dan mengubah status unit menjadi `BORROWED`. Pilihan kendala **tidak** membuat transaksi; unit ditandai `MAINTENANCE` untuk diperiksa petugas. | Mahasiswa / Sistem |
@@ -127,9 +127,9 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
 |----|----------|-------------|
 | NFR-01 | Performa | Proses baca QR hingga pengambilan *snapshot* kamera di browser memakan waktu < 1 detik. |
 | NFR-02 | Penyimpanan | Foto dikompres di sisi klien sebelum diunggah; target maksimal 250 KB per foto dengan kualitas yang masih cukup untuk melihat unit proyektor dan wajah. |
-| NFR-03 | Keamanan | Halaman Kiosk dan Admin dilindungi autentikasi petugas dengan **satu akun per petugas** (tidak berbagi). Peran `STAFF` dan `ADMIN` dibedakan sesuai matriks hak akses 3.3. Row Level Security aktif pada semua tabel; *service role key* hanya digunakan di server. Token QR diverifikasi di server (tanda tangan, kedaluwarsa, versi, status akun, status ketua). |
-| NFR-04 | Kompatibilitas | Antarmuka QR Mahasiswa wajib responsif di layar mobile (Chrome Android / Safari iOS), dan Kiosk berjalan optimal di layar laptop (1366x768 ke atas). |
-| NFR-05 | Privasi | Sistem menjelaskan tujuan pengambilan foto wajah referensi, foto dokumen, dan foto transaksi saat registrasi, lalu meminta persetujuan eksplisit. Foto wajah hanya digunakan sebagai pembanding visual manual oleh petugas; tidak ada pencocokan wajah otomatis pada MVP. |
+| NFR-03 | Keamanan & Multi-Role | Halaman Kiosk dan Admin dilindungi autentikasi petugas dengan **satu akun per petugas** (tidak berbagi). Peran `STAFF` dan `ADMIN` dibedakan sesuai matriks hak akses 3.3 dan diverifikasi di sisi server (`guards` & layout server-side). Mahasiswa tidak dapat membuka rute admin/kiosk, dan petugas tidak dapat membuka rute mahasiswa. Tab dalam profil browser yang sama pada origin yang sama secara normal berbagi cookie sesi; pengujian simultan antar-peran (Admin vs Mahasiswa) dilakukan melalui **profil browser yang berbeda** (misal Chrome Profile 1 & 2) atau jendela browser terpisah tanpa merusak keamanan sesi Supabase Auth. Row Level Security aktif pada semua tabel; *service role key* hanya digunakan di server. |
+| NFR-04 | Kompatibilitas | Antarmuka QR Mahasiswa dan alur registrasi foto mandiri wajib responsif di layar mobile (Chrome Android / Safari iOS), dan Kiosk berjalan optimal di layar laptop / monitor kedua (1366x768 ke atas) dengan dukungan Fullscreen API. |
+| NFR-05 | Privasi & Integritas Gambar | Sistem menjelaskan tujuan pengambilan foto wajah referensi, foto dokumen kartu identitas, dan foto transaksi saat registrasi, lalu meminta persetujuan eksplisit. Seluruh foto wajib diambil secara langsung via kamera perangkat (dilarang unggah dari galeri/file picker). **Tidak boleh ada gambar yang mengalami efek mirror / pembalikan horizontal** pada pratinjau maupun hasil tangkapan. Deteksi wajah (*face detection*) semata-mata digunakan sebagai panduan penempatan (*framing*) visual dan jarak, tanpa pengenalan wajah (*facial recognition*), pencocokan otomatis, atau ekstraksi biometrik. |
 | NFR-06 | Integritas Data | Perubahan status unit dan penyimpanan transaksi dilakukan atomik dalam satu fungsi basis data. Basis data menegakkan *partial unique index* (satu transaksi aktif per unit dan per ketua kelas). Endpoint transaksi memakai *idempotency key* agar pengiriman ganda tidak membuat transaksi ganda. |
 | NFR-07 | Privasi | Foto wajah referensi, foto dokumen, dan foto transaksi disimpan pada bucket privat. Akses dibatasi berdasarkan peran, memakai signed URL berumur pendek (maks. 60 detik), dan setiap pembuatannya dicatat di audit log. Basis data menyimpan **path** objek storage, bukan URL. |
 | NFR-08 | Retensi Data | **Default MVP** (dapat diubah mengikuti kebijakan kampus): foto wajah referensi disimpan selama akun `ACTIVE` dan dihapus 90 hari setelah akun `INACTIVE`; foto dokumen dihapus segera setelah keputusan petugas (batas maksimal 24 jam); foto transaksi dihapus 180 hari setelah transaksi selesai, kecuali terkait kendala yang belum diselesaikan. Tidak ada NIK atau teks hasil baca dokumen yang disimpan. |
@@ -153,30 +153,32 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
 
 ## 4. Core Feature
 
-### FT-00 — Registrasi, Verifikasi Tatap Muka & Klaim Ketua Kelas
-- **Deskripsi**: Proses pendaftaran yang menggabungkan verifikasi email, pemilihan kelas, verifikasi tatap muka di TU (foto wajah dan foto KTM/KTP oleh petugas), serta klaim ketua kelas yang disetujui petugas.
-- **Alasan dibutuhkan**: Memastikan hanya ketua kelas yang dapat diverifikasi yang memegang QR Pass, tanpa petugas mengelola daftar ketua kelas.
+### FT-00 — Registrasi Mandiri, Verifikasi Kamera & Keputusan Admin
+- **Deskripsi**: Proses pendaftaran mandiri mahasiswa yang menggabungkan pengisian data, verifikasi email, pengambilan foto wajah mandiri dengan panduan face detection, pemotretan kartu identitas (KTM/KTP) langsung dari kamera tanpa unggah galeri, pemeriksaan sebelum pengiriman, serta pemeriksaan dan keputusan manual oleh Admin/TU.
+- **Alasan dibutuhkan**: Memungkinkan mahasiswa menyelesaikan pendaftaran foto secara mandiri dari perangkat masing-masing, sementara verifikasi dan persetujuan ketua kelas tetap diawasi secara cermat dan manual oleh petugas TU.
 - **Prioritas**: Must
 - **Requirement terkait**: FR-01, FR-01A, FR-01B, FR-01C, FR-01D, FR-01E, FR-01F, FR-13, FR-14
 - **Alur**:
-  1. Mahasiswa membuat akun, mengisi nama, NIM, email, dan memilih kelas dari daftar baku.
-  2. Supabase Auth mengirim tautan/kode verifikasi email.
-  3. Setelah email terverifikasi, mahasiswa datang ke meja TU.
-  4. Petugas membuka antrean verifikasi dan mengambil foto wajah referensi dengan persetujuan eksplisit mahasiswa (kamera perangkat petugas).
-  5. Petugas memotret KTM atau KTP mahasiswa (setara).
-  6. Petugas mencocokkan wajah, nama, dan memastikan status mahasiswa/ketua kelas, lalu mencentang hasilnya.
-  7. Petugas memilih `APPROVE`, `REJECT` (dengan alasan), atau `REQUEST_RESUBMISSION`. Jika kelas belum punya ketua, persetujuan juga menetapkan mahasiswa sebagai ketua; jika kelas sudah punya ketua, klaim penggantian diputuskan terpisah.
-  8. Setelah disetujui, status akun menjadi `ACTIVE`, foto dokumen dihapus, dan QR Pass dapat ditampilkan jika mahasiswa menjadi ketua aktif.
+  1. **Tahap 1 — Pengisian Data**: Mahasiswa mengisi nama lengkap, NIM, email, kata sandi, memilih kelas dari daftar baku, dan mencentang persetujuan privasi. Supabase Auth mengirimkan tautan konfirmasi email.
+  2. **Tahap 2 — Pengambilan Foto Wajah**: Setelah email terverifikasi, mahasiswa menyalakan kamera perangkat. Sistem menjalankan *face detection* ringan sebagai panduan *framing* visual (memastikan wajah terdeteksi, berada di tengah panduan oval, dan jarak ideal). Foto diambil langsung dari kamera (tanpa unggah galeri, dilarang efek mirror). Mahasiswa dapat meninjau dan mengambil ulang.
+  3. **Tahap 3 — Pengambilan Foto Kartu Identitas**: Mahasiswa memotret fisik KTM atau KTP langsung via kamera perangkat dengan panduan kotak kartu identitas. Dilarang unggah dari galeri; sistem tidak menjalankan OCR dan tidak menyimpan NIK. Mahasiswa dapat meninjau dan mengambil ulang.
+  4. **Tahap 4 — Pemeriksaan Sebelum Pengiriman**: Mahasiswa melihat ringkasan lengkap data diri, foto wajah, dan foto kartu. Mahasiswa dapat kembali ke tahap sebelumnya untuk memperbaiki data atau foto. Setelah yakin, permohonan dikirimkan ke antrean admin (status menjadi `PENDING_REVIEW`).
+  5. **Pemeriksaan & Keputusan Admin**: Petugas Admin/TU memeriksa antrean verifikasi, mencocokkan visual wajah pada foto dengan foto kartu identitas, mencocokkan nama, dan memastikan kelayakan ketua kelas. Petugas memutuskan:
+     - `APPROVE`: status menjadi `ACTIVE`, klaim ketua `INITIAL` disetujui jika kelas belum berketua.
+     - `REJECT`: status menjadi `REJECTED` dengan catatan alasan penolakan wajib.
+     - `REQUEST_RESUBMISSION`: status menjadi `RESUBMISSION_REQUIRED` dengan instruksi perbaikan wajib; mahasiswa mengulang pengambilan foto dari akunnya.
+  6. **Penghapusan Foto Dokumen**: Pada ketiga jenis keputusan, foto kartu identitas segera dihapus secara permanen dari Supabase Storage. Foto wajah referensi disimpan selama akun berstatus aktif.
 - **Acceptance criteria**:
-  - [ ] Akun tidak dapat melakukan transaksi sebelum email terverifikasi, status `ACTIVE`, dan menjadi ketua aktif kelasnya.
+  - [ ] Akun tidak dapat melakukan transaksi sebelum email terverifikasi, foto disetujui admin (status `ACTIVE`), dan menjadi ketua aktif kelasnya.
   - [ ] Pilihan kelas berasal dari daftar baku; tidak ada input kelas bebas.
-  - [ ] Foto wajah dan foto dokumen diambil di perangkat petugas pada sesi tatap muka; tidak ada unggah dari galeri mahasiswa.
-  - [ ] KTM dan KTP diterima dengan perlakuan sama; sistem tidak menyimpan NIK maupun teks hasil baca dokumen.
-  - [ ] Petugas dapat menyetujui, menolak dengan alasan, atau meminta pengambilan ulang; ketiga centang pemeriksaan tercatat.
-  - [ ] Pendaftar pertama pada kelas tanpa ketua tampil sebagai "calon ketua"; pendaftar berikutnya pada kelas yang sama tampil sebagai "permintaan penggantian" dan tidak aktif sebelum disetujui.
-  - [ ] Foto dokumen terhapus dari storage setelah keputusan; foto wajah referensi tetap tersedia selama akun aktif.
+  - [ ] Foto wajah dan foto kartu identitas wajib diambil langsung menggunakan kamera perangkat; tidak ada opsi unggah dari galeri/file picker.
+  - [ ] Tidak ada satu pun gambar (pratinjau kamera depan/belakang, kanvas, hasil foto, maupun tampilan admin) yang mengalami efek mirror / pembalikan horizontal (`scaleX(-1)` dilarang keras).
+  - [ ] *Face detection* hanya berfungsi memandu posisi dan jarak wajah; tidak ada pengenalan wajah otomatis (*facial recognition*) atau inferensi biometrik.
+  - [ ] KTM dan KTP diterima dengan perlakuan setara; sistem tidak menyimpan NIK maupun teks hasil baca OCR.
+  - [ ] Petugas dapat memutuskan Approve, Reject (dengan alasan), atau Request Resubmission (dengan instruksi); ketiga centang pemeriksaan manual tercatat.
+  - [ ] Foto dokumen identitas terhapus secara permanen dari Supabase Storage segera setelah keputusan dibuat; foto wajah referensi tetap tersedia selama akun aktif.
   - [ ] Dua pendaftar dengan NIM sama dapat berada di antrean, tetapi hanya satu yang dapat berstatus `ACTIVE`; antrean menandai duplikasi NIM kepada petugas.
-- **Status**: Belum
+- **Status**: Selesai
 
 ### FT-01 — QR Pass Ketua Kelas (Mobile View)
 - **Deskripsi**: Halaman mahasiswa yang menampilkan QR Pass berupa token bertanda tangan berumur singkat, serta pengalihan jabatan ketua.
@@ -192,13 +194,17 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
   - [ ] Layar menampilkan instruksi menaikkan *brightness* dan pesan jelas jika HP tidak ada koneksi.
 - **Status**: Belum
 
-### FT-02 — Dual-Scan Kiosk, Dokumentasi Foto & Konfirmasi
-- **Deskripsi**: Halaman Kiosk di laptop petugas untuk memindai QR ketua kelas dan QR unit proyektor, mengambil foto dokumentasi, dan menyelesaikan transaksi dengan konfirmasi singkat. Menyediakan jalur cadangan pencarian manual.
-- **Alasan dibutuhkan**: Mempercepat transaksi tanpa checklist pemeriksaan rutin dan tanpa penitipan KTP.
+### FT-02 — Dual-Scan Kiosk, Dokumentasi Foto, Navigasi Tab & Fullscreen
+- **Deskripsi**: Halaman Kiosk dioperasikan pada tab terpisah dari Dashboard Admin (`target="_blank"`), dapat dipindahkan ke monitor kedua, dan mendukung mode layar penuh (Fullscreen API). Kiosk beroperasi mandiri tanpa memuat sidebar atau menu administrasi untuk memindai QR ketua kelas dan QR unit proyektor, mengambil foto dokumentasi, dan menyelesaikan transaksi dengan konfirmasi singkat. Menyediakan jalur cadangan pencarian manual.
+- **Alasan dibutuhkan**: Mempercepat transaksi tanpa checklist pemeriksaan rutin dan tanpa penitipan KTP, sekaligus memungkinkan operator tetap memantau dashboard admin di monitor utama saat melayani mahasiswa di monitor kedua.
 - **Prioritas**: Must
 - **Requirement terkait**: FR-03 sampai FR-08, FR-15, FR-16, FR-17
 - **Acceptance criteria**:
-  - [ ] Menampilkan *live feed* kamera webcam.
+  - [ ] Dibuka melalui tombol "Buka Kiosk" pada dashboard admin ke tab baru (`target="_blank"`, `rel="noopener noreferrer"`) tanpa menutup atau menggantikan halaman dashboard.
+  - [ ] Dapat dipindahkan ke monitor kedua melalui jendela browser sistem operasi dan menyesuaikan resolusi secara responsif.
+  - [ ] Menyediakan kontrol tombol Masuk/Keluar Layar Penuh menggunakan Fullscreen API browser dengan penanganan fallback jika peramban tidak mendukung.
+  - [ ] Tidak menampilkan sidebar dashboard admin, menu navigasi admin, atau informasi sensitif yang tidak dibutuhkan mahasiswa.
+  - [ ] Menampilkan *live feed* kamera webcam untuk pemindaian dual-scan berkelanjutan.
   - [ ] Menampilkan identitas ketua kelas, kelas, dan unit proyektor yang sedang diproses; untuk unit `BORROWED` menampilkan peminjam aktif, `due_at`, dan penanda terlambat jika lewat.
   - [ ] Mengambil foto dokumentasi setelah identitas dan unit tervalidasi, dengan hitung mundur dan pratinjau yang dapat diulang. Foto pinjam menampilkan orang yang mengambil bersama proyektor; foto kembali menampilkan unit dengan jelas dan pengembali jika memungkinkan.
   - [ ] Menampilkan satu konfirmasi dengan dua pilihan: "Saya menerima/mengembalikan proyektor dalam kondisi yang terlihat normal" atau "Laporkan kendala".
@@ -208,7 +214,7 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
   - [ ] Tidak ada checklist komponen atau pemeriksaan fisik wajib pada transaksi normal.
   - [ ] Transaksi hanya disimpan setelah validasi dan konfirmasi; sistem memberi notifikasi sukses dan mereset sesi Kiosk.
   - [ ] Pengiriman ganda (klik dua kali / koneksi putus-sambung) tidak membuat transaksi ganda.
-- **Status**: Belum
+- **Status**: Selesai
 
 ### FT-03 — Dashboard Buku Besar Digital, Inventaris & Keterlambatan
 - **Deskripsi**: Panel admin/petugas untuk memantau status setiap unit, riwayat transaksi, unit terlambat, dokumentasi foto, riwayat perubahan status, dan pengelolaan QR aset.
@@ -242,19 +248,22 @@ Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu 
 ---
 ## 5. User Flow
 
-### 5.1 Alur Registrasi, Verifikasi & Klaim Ketua Kelas
-1. Mahasiswa membuat akun dengan Nama, NIM, email, dan memilih kelas dari daftar baku.
-2. Mahasiswa memverifikasi email. Status berubah menjadi `PENDING_DOCUMENT`.
-3. Mahasiswa datang ke meja TU. Petugas membuka antrean verifikasi dan memilih nama mahasiswa.
-4. Petugas mengambil **foto wajah referensi** setelah mahasiswa menyetujui pengambilan foto.
-5. Petugas mengambil **foto KTM atau KTP** (setara). Status menjadi `PENDING_REVIEW`.
-6. Petugas mencocokkan wajah dengan foto dokumen, nama dokumen dengan nama registrasi, dan memastikan status mahasiswa/ketua kelas, lalu mencentang ketiganya.
-7. Petugas memutuskan:
-   - **Disetujui**: status `ACTIVE`; klaim ketua `INITIAL` disetujui jika kelas belum punya ketua.
-   - **Perlu ulang**: status `RESUBMISSION_REQUIRED` dengan catatan.
-   - **Ditolak**: status `REJECTED` dengan alasan.
-8. Foto dokumen dihapus segera setelah keputusan. Foto wajah referensi tetap disimpan selama akun aktif.
-9. Jika kelas sudah punya ketua, klaim `REPLACEMENT` menunggu keputusan petugas dan QR belum tersedia sampai disetujui.
+### 5.1 Alur Registrasi Mandiri, Verifikasi & Klaim Ketua Kelas
+1. **Tahap 1 — Pengisian Data**: Mahasiswa mendaftar dengan Nama Lengkap, NIM, email, kata sandi, memilih kelas baku, dan menyetujui pernyataan privasi.
+2. **Verifikasi Email**: Mahasiswa memverifikasi email melalui tautan Supabase Auth. Setelah terverifikasi, status akun menjadi `PENDING_DOCUMENT`.
+3. **Tahap 2 — Pengambilan Foto Wajah Mandiri**: Mahasiswa mengaktifkan kamera perangkat. Sistem menjalankan *face detection* untuk memberikan panduan posisi (*framing* oval tengah dan jarak ideal). Mahasiswa mengambil foto secara langsung (tanpa unggah galeri, tanpa efek mirror). Foto dapat ditinjau dan diambil ulang.
+4. **Tahap 3 — Pengambilan Foto Kartu Identitas**: Mahasiswa memotret kartu fisik KTM atau KTP secara langsung via kamera perangkat dengan bantuan panduan kotak kartu identitas (tanpa unggah galeri dan tanpa OCR). Foto dapat ditinjau dan diambil ulang.
+5. **Tahap 4 — Pemeriksaan Sebelum Pengiriman**: Mahasiswa memeriksa ringkasan data diri dan kedua foto. Mahasiswa dapat kembali untuk memperbaiki data atau mengulang foto. Setelah yakin, permohonan dikirimkan ke server; status berubah menjadi `PENDING_REVIEW`.
+6. **Pemeriksaan Manual oleh Petugas Admin/TU**: Petugas membuka antrean verifikasi di dashboard admin dan melakukan pencocokan manual:
+   - (a) Kesesuaian visual wajah mahasiswa pada foto dengan foto pada dokumen identitas.
+   - (b) Kesesuaian nama pada dokumen identitas dengan nama terdaftar.
+   - (c) Kesesuaian informasi kelas dan konfirmasi kelayakan sebagai ketua kelas.
+7. **Keputusan Petugas**:
+   - **Disetujui (`APPROVE`)**: status menjadi `ACTIVE`; klaim ketua `INITIAL` disetujui jika kelas belum berketua.
+   - **Perlu Perbaikan (`REQUEST_RESUBMISSION`)**: status menjadi `RESUBMISSION_REQUIRED` dengan catatan instruksi perbaikan; mahasiswa dapat mengulang pengambilan foto dari portalnya.
+   - **Ditolak (`REJECT`)**: status menjadi `REJECTED` dengan catatan alasan penolakan wajib.
+8. **Penghapusan Instan Foto Dokumen**: Pada semua keputusan verifikasi (Approve, Reject, Resubmission), foto dokumen identitas dihapus permanen dari Supabase Storage. Foto wajah referensi tetap disimpan selama akun berstatus aktif.
+9. Jika kelas sudah memiliki ketua terdaftar, klaim tercatat sebagai `REPLACEMENT` dan menunggu keputusan terpisah dari petugas sebelum QR Pass diterbitkan.
 
 **Pergantian semester**: mahasiswa `ACTIVE` memilih kelas baru dan mengajukan klaim tanpa foto ulang; petugas menyetujui secara singkat.
 

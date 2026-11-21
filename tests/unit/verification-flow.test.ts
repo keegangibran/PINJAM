@@ -186,7 +186,11 @@ describe('Verification Decision API Unit Tests', () => {
     const updateStudentMock = vi.fn().mockReturnThis();
     mockAdminFrom.mockImplementationOnce(() => ({
       update: updateStudentMock,
-      eq: vi.fn().mockResolvedValueOnce({ data: null, error: null }),
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValueOnce({ data: [{ id: 'stu-valid' }], error: null }),
+        }),
+      }),
     }));
 
     // 4. Fetch initial pending claim
@@ -289,7 +293,11 @@ describe('Verification Decision API Unit Tests', () => {
     const updateStudentMock = vi.fn().mockReturnThis();
     mockAdminFrom.mockImplementationOnce(() => ({
       update: updateStudentMock,
-      eq: vi.fn().mockResolvedValueOnce({ data: null, error: null }),
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValueOnce({ data: [{ id: 'stu-resubmit' }], error: null }),
+        }),
+      }),
     }));
 
     const validNotes = 'Foto KTM buram dan tidak terbaca, silakan ambil ulang foto fisik KTM di meja TU.';
@@ -342,6 +350,132 @@ describe('Verification Decision API Unit Tests', () => {
         }),
       })
     );
+  });
+
+  it('preserves verification_document_path in DB and marks cleanup_pending when Storage removal fails', async () => {
+    // 1. Fetch current student
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'stu-storage-fail',
+          nim: '220101004',
+          name: 'Mahasiswa Storage Error',
+          current_class_id: null,
+          verification_document_path: 'documents/ktm_orphan.jpg',
+          registration_status: 'PENDING_REVIEW',
+        },
+        error: null,
+      }),
+    }));
+
+    // 2. Check duplicate active NIM returns null
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      neq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({ data: null }),
+    }));
+
+    // Mock storage removal failure (e.g., storage network error)
+    mockStorageRemove.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'Storage connection timeout' },
+    });
+
+    // 3. Update student table
+    const updateStudentMock = vi.fn().mockReturnThis();
+    mockAdminFrom.mockImplementationOnce(() => ({
+      update: updateStudentMock,
+      eq: vi.fn().mockReturnValue({
+        eq: vi.fn().mockReturnValue({
+          select: vi.fn().mockResolvedValueOnce({ data: [{ id: 'stu-storage-fail' }], error: null }),
+        }),
+      }),
+    }));
+
+    const req = new Request('http://localhost/api/admin/verifications/stu-storage-fail', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'APPROVE',
+        checks: {
+          face_match: true,
+          name_match: true,
+          status_confirmed: true,
+        },
+      }),
+    });
+
+    const res = await handleVerification(req, {
+      params: Promise.resolve({ studentId: 'stu-storage-fail' }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(200);
+    expect(data.data.document_photo_deleted).toBe(false);
+    expect(data.data.cleanup_pending).toBe(true);
+
+    // verification_document_path must NOT be null in DB so retention cron can retry
+    expect(updateStudentMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        registration_status: 'ACTIVE',
+        verification_document_path: 'documents/ktm_orphan.jpg',
+      })
+    );
+
+    // Audit log records cleanup_pending: true and storage error
+    expect(audit.recordAuditLog).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({
+        metadata: expect.objectContaining({
+          document_photo_deleted: false,
+          document_photo_cleanup_pending: true,
+          document_deletion_error: 'Storage connection timeout',
+        }),
+      })
+    );
+  });
+
+  it('rejects with 409 CONFLICT_ALREADY_DECIDED when student is already in terminal state or concurrent admin updated first', async () => {
+    // 1. Fetch current student returns student already ACTIVE
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'stu-already-active',
+          nim: '220101005',
+          name: 'Mahasiswa Sudah Aktif',
+          current_class_id: null,
+          verification_document_path: null,
+          registration_status: 'ACTIVE', // Already decided!
+        },
+        error: null,
+      }),
+    }));
+
+    const req = new Request('http://localhost/api/admin/verifications/stu-already-active', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        decision: 'APPROVE',
+        checks: {
+          face_match: true,
+          name_match: true,
+          status_confirmed: true,
+        },
+      }),
+    });
+
+    const res = await handleVerification(req, {
+      params: Promise.resolve({ studentId: 'stu-already-active' }),
+    });
+
+    const data = await res.json();
+    expect(res.status).toBe(409);
+    expect(data.error.code).toBe('CONFLICT_ALREADY_DECIDED');
   });
 });
 

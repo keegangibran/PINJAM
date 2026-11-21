@@ -388,3 +388,65 @@ export async function POST(request: Request) {
     );
   }
 }
+
+export async function GET() {
+  try {
+    const supabase = await createServerSupabaseClient();
+    const { data: { user }, error: userError } = await supabase.auth.getUser();
+
+    if (userError || !user) {
+      return NextResponse.json({
+        success: true,
+        authenticated: false,
+        data: null,
+      });
+    }
+
+    const adminClient = createAdminClient();
+    const { data: student } = await adminClient
+      .from('students')
+      .select(`
+        id,
+        nim,
+        name,
+        email,
+        registration_status,
+        profile_photo_path,
+        verification_document_path,
+        verification_document_type,
+        verification_notes,
+        current_class_id,
+        current_class:classes!students_current_class_id_fkey (
+          id,
+          study_program,
+          cohort_year,
+          section,
+          academic_term
+        )
+      `)
+      .eq('auth_user_id', user.id)
+      .maybeSingle();
+
+    if (!student) {
+      return NextResponse.json({
+        success: true,
+        authenticated: true,
+        isOrphan: true,
+        data: null,
+      });
+    }
+
+    return NextResponse.json({
+      success: true,
+      authenticated: true,
+      isOrphan: false,
+      data: student,
+    });
+  } catch (err: any) {
+    return NextResponse.json(
+      { error: { code: 'SERVER_ERROR', message: err.message || 'Terjadi kesalahan sistem.' } },
+      { status: 500 }
+    );
+  }
+}
+
