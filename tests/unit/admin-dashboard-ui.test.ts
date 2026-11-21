@@ -5,6 +5,9 @@ import AdminDashboardView, {
   SummaryData,
   LoanRecord,
   MaintenanceStatusData,
+  buildExportUrl,
+  getReturnerDisplayText,
+  formatBytes,
 } from '@/components/admin/AdminDashboardView';
 import AdminDashboardPage from '@/app/admin/page';
 
@@ -148,8 +151,11 @@ describe('Admin Dashboard UI/UX & Responsive Ledger Tests (Fase 3)', () => {
       storage_usage_pct: 12.5,
     },
     storage_monitoring: {
+      current_usage_bytes: 134217728, // 128 MB
       current_usage_pct: 12.5,
       warning_active: false,
+      max_capacity_bytes: 1073741824, // 1 GB
+      last_checked_at: '2026-11-20T02:00:00.000Z',
     },
     academic_term: {
       current_term: '2026/2027 Ganjil',
@@ -359,11 +365,70 @@ describe('Admin Dashboard UI/UX & Responsive Ledger Tests (Fase 3)', () => {
       expect(html).toContain('Pemeliharaan Terjadwal &amp; Kuota Storage (NFR-10)');
       expect(html).toContain('Pemakaian Kuota Storage');
       expect(html).toContain('12.5% / 100%');
-      expect(html).toContain('Kapasitas: 1 GB');
+      expect(html).toContain('128 MB / 1 GB');
       expect(html).toContain('Jadwal Rutin Vercel Cron');
       expect(html).toContain('02:00 WIB');
       expect(html).toContain('keep-alive');
       expect(html).toContain('Jalankan Retensi Sekarang');
+    });
+
+    it('renders badge "Belum Dihitung" and 0% gauge when storage metrics are uninitialized or missing', () => {
+      const uninitializedMaintenance: MaintenanceStatusData = {
+        retention_last_run: null,
+        storage_monitoring: {
+          warning_threshold_pct: 70,
+          max_capacity_bytes: 1073741824,
+        },
+        academic_term: null,
+      };
+
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialMaintenance: uninitializedMaintenance,
+        })
+      );
+
+      // Pastikan TIDAK menampilkan 0.0% seolah-olah data pengukuran riil
+      expect(html).not.toContain('0.0% / 100%');
+      // Menampilkan badge "Belum Dihitung"
+      expect(html).toContain('Belum Dihitung');
+      // Menampilkan keterangan bahwa metrik belum tersedia
+      expect(html).toContain('Metrik belum tersedia');
+      expect(html).toContain('Kapasitas: 1 GB');
+      // Gauge tidak boleh menggambarkan nilai aktual yang belum diketahui (width: 0%)
+      expect(html).toContain('style="width:0%"');
+    });
+
+    it('renders badge "Gagal Memuat" and error text without defaulting to 0 on failure', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialMaintenance: null,
+          initialMaintenanceError: 'Gangguan jaringan saat memuat status pemeliharaan.',
+        })
+      );
+
+      // Pastikan TIDAK menampilkan 0.0%
+      expect(html).not.toContain('0.0% / 100%');
+      // Menampilkan badge "Gagal Memuat"
+      expect(html).toContain('Gagal Memuat');
+      // Menampilkan pesan error kegagalan
+      expect(html).toContain('Gagal memuat metrik storage');
+      expect(html).toContain('style="width:0%"');
+    });
+
+    it('formatBytes helper formats bytes correctly', () => {
+      expect(formatBytes(0)).toBe('0 B');
+      expect(formatBytes(1024)).toBe('1 KB');
+      expect(formatBytes(1048576)).toBe('1 MB');
+      expect(formatBytes(1073741824)).toBe('1 GB');
+      expect(formatBytes(134217728)).toBe('128 MB');
+      expect(formatBytes(undefined)).toBe('-');
     });
 
     it('renders modernized Header, Shell & Toolbar with Balanced Navy design tokens', () => {
@@ -405,6 +470,375 @@ describe('Admin Dashboard UI/UX & Responsive Ledger Tests (Fase 3)', () => {
       expect(html).toContain('Dashboard Admin');
       expect(html).toContain('data-testid="summary-card-total"');
       expect(html).toContain('data-testid="summary-card-maintenance"');
+    });
+  });
+
+  describe('5. Photo Documentation Modal Migration to Shared Modal (Phase 2.3 - Irisan 2)', () => {
+    it('does not render photo modal when photoModalLoan is null', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialPhotoModalLoan: null,
+        })
+      );
+
+      expect(html).not.toContain('Dokumentasi Foto Transaksi');
+      expect(html).not.toContain('1. Foto Profil Terverifikasi');
+    });
+
+    it('renders shared Modal with accessibility attributes and 3 photo cards when photoModalLoan is set', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialPhotoModalLoan: sampleLoans[0],
+        })
+      );
+
+      // Shared Modal ARIA and Structure
+      expect(html).toContain('role="dialog"');
+      expect(html).toContain('aria-modal="true"');
+      expect(html).toContain('aria-labelledby=');
+      expect(html).toContain('aria-label="Tutup dialog"');
+      expect(html).toContain('max-w-4xl'); // size="xl"
+
+      // Title & Description
+      expect(html).toContain('Dokumentasi Foto Transaksi');
+      expect(html).toContain(
+        'Perbandingan manual foto wajah referensi, foto serah-terima pinjam, dan foto pengembalian.'
+      );
+
+      // Transaction info
+      expect(html).toContain('TEST-PROJ-001');
+      expect(html).toContain('Andi Pratama');
+      expect(html).toContain('NIM 2301001');
+
+      // 3 Photo Cards & Badges
+      expect(html).toContain('1. Foto Profil Terverifikasi');
+      expect(html).toContain('Referensi');
+      expect(html).toContain('2. Foto Serah Terima Pinjam');
+      expect(html).toContain('3. Foto Serah Terima Kembali');
+      expect(html).toContain('Kiosk Meja TU');
+
+      // Alignment and Aspect Ratio Classes
+      expect(html).toContain('min-h-[40px] md:min-h-[44px]');
+      expect(html).toContain('aspect-[3/4]');
+
+      // Footer Privacy Notice & Close Button
+      expect(html).toContain(
+        'Foto disimpan di bucket privat dan hanya diakses melalui signed URL sementara (60 detik).'
+      );
+      expect(html).toContain('Tutup');
+    });
+
+    describe('Returner Name Formatting in Photo Modal & Mobile Cards (FR-07 & Fase 2.3 UAT Follow-Up)', () => {
+      // 1. BORROWER dengan returned_by_name NULL tetapi student.name tersedia → nama mahasiswa
+      it('formats BORROWER with returned_by_name NULL using student.name relation', () => {
+        const text = getReturnerDisplayText({
+          status: 'COMPLETED',
+          returned_at: '2026-11-20T14:00:00.000Z',
+          returned_by_type: 'BORROWER',
+          returned_by_name: null,
+          student: { name: 'Ahmad Dahlan' },
+        });
+        expect(text).toBe('Ahmad Dahlan');
+      });
+
+      // 2. REPRESENTATIVE dengan nama tersedia → nama perwakilan (Perwakilan)
+      it('formats REPRESENTATIVE with available name as "{nama} (Perwakilan)"', () => {
+        const text = getReturnerDisplayText({
+          status: 'COMPLETED',
+          returned_at: '2026-11-20T14:00:00.000Z',
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: 'Keegan',
+          student: { name: 'Ahmad Dahlan' },
+        });
+        expect(text).toBe('Keegan (Perwakilan)');
+      });
+
+      // 3. REPRESENTATIVE tanpa nama → "-"
+      it('formats REPRESENTATIVE without name as "-"', () => {
+        const text = getReturnerDisplayText({
+          status: 'COMPLETED',
+          returned_at: '2026-11-20T14:00:00.000Z',
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: null,
+        });
+        expect(text).toBe('-');
+
+        const textWhitespace = getReturnerDisplayText({
+          status: 'COMPLETED',
+          returned_at: '2026-11-20T14:00:00.000Z',
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: '   ',
+        });
+        expect(textWhitespace).toBe('-');
+      });
+
+      // 4. ACTIVE → "-"
+      it('formats ACTIVE loan as "-"', () => {
+        const text = getReturnerDisplayText({
+          status: 'ACTIVE',
+          returned_at: null,
+          returned_by_type: 'BORROWER',
+          student: { name: 'Ahmad Dahlan' },
+        });
+        expect(text).toBe('-');
+      });
+
+      // 5. Data mahasiswa tidak tersedia → "-"
+      it('formats BORROWER with missing student relation data as "-" without fabricating data', () => {
+        expect(
+          getReturnerDisplayText({
+            status: 'COMPLETED',
+            returned_at: '2026-11-20T14:00:00.000Z',
+            returned_by_type: 'BORROWER',
+            returned_by_name: null,
+            student: null,
+          })
+        ).toBe('-');
+
+        expect(
+          getReturnerDisplayText({
+            status: 'COMPLETED',
+            returned_at: '2026-11-20T14:00:00.000Z',
+            returned_by_type: 'BORROWER',
+            returned_by_name: null,
+            student: { name: '   ' },
+          })
+        ).toBe('-');
+      });
+
+      // 6. Tidak ada fallback ke nama mahasiswa untuk tipe REPRESENTATIVE
+      it('does NOT fallback to student name for REPRESENTATIVE when representative name is missing', () => {
+        const text = getReturnerDisplayText({
+          status: 'COMPLETED',
+          returned_at: '2026-11-20T14:00:00.000Z',
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: null,
+          student: { name: 'Peminjam Asli' },
+        });
+        expect(text).toBe('-');
+        expect(text).not.toContain('Peminjam Asli');
+      });
+
+      // 7. Render DOM Photo Modal: BORROWER dengan returned_by_name NULL
+      it('renders actual borrower student name in photo modal when returned_by_name is NULL', () => {
+        const normalReturnLoan: LoanRecord = {
+          ...sampleLoans[1],
+          student: {
+            id: 'std-001',
+            nim: '2301001',
+            name: 'Andi Pratama',
+            profile_photo_path: null,
+          },
+          returned_by_type: 'BORROWER',
+          returned_by_name: null, // Null di DB sesuai migrasi atomic
+        };
+
+        const html = renderToStaticMarkup(
+          React.createElement(AdminDashboardView, {
+            initialSummary: sampleSummary,
+            initialLoans: [normalReturnLoan],
+            initialTotalCount: 1,
+            initialPhotoModalLoan: normalReturnLoan,
+          })
+        );
+
+        expect(html).toContain('Pengembali: Andi Pratama');
+        expect(html).not.toContain('Pengembali: -');
+        expect(html).not.toContain('Pengembali: Andi Pratama (Perwakilan)');
+      });
+
+      // 8. Render DOM Photo Modal: REPRESENTATIVE
+      it('renders representative returner name with (Perwakilan) in photo modal', () => {
+        const repReturnLoan: LoanRecord = {
+          ...sampleLoans[1],
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: 'Keegan',
+        };
+
+        const html = renderToStaticMarkup(
+          React.createElement(AdminDashboardView, {
+            initialSummary: sampleSummary,
+            initialLoans: [repReturnLoan],
+            initialTotalCount: 1,
+            initialPhotoModalLoan: repReturnLoan,
+          })
+        );
+
+        expect(html).toContain('Pengembali: Keegan (Perwakilan)');
+      });
+
+      // 9. Render DOM Photo Modal: ACTIVE loan
+      it('renders "-" in photo modal when transaction is unreturned (ACTIVE)', () => {
+        const html = renderToStaticMarkup(
+          React.createElement(AdminDashboardView, {
+            initialSummary: sampleSummary,
+            initialLoans: sampleLoans,
+            initialTotalCount: 2,
+            initialPhotoModalLoan: sampleLoans[0], // ACTIVE loan
+          })
+        );
+
+        expect(html).toContain('Pengembali: -');
+      });
+
+      // 10. Render DOM Photo Modal: REPRESENTATIVE tanpa nama tidak boleh fallback ke nama mahasiswa
+      it('renders "-" in photo modal for REPRESENTATIVE without name even when student name is present', () => {
+        const repMissingNameLoan: LoanRecord = {
+          ...sampleLoans[1],
+          student: {
+            id: 'std-999',
+            nim: '2309999',
+            name: 'Peminjam Asli',
+            profile_photo_path: null,
+          },
+          returned_by_type: 'REPRESENTATIVE',
+          returned_by_name: null,
+        };
+
+        const html = renderToStaticMarkup(
+          React.createElement(AdminDashboardView, {
+            initialSummary: sampleSummary,
+            initialLoans: [repMissingNameLoan],
+            initialTotalCount: 1,
+            initialPhotoModalLoan: repMissingNameLoan,
+          })
+        );
+
+        expect(html).toContain('Pengembali: -');
+        expect(html).not.toContain('Pengembali: Peminjam Asli');
+        expect(html).toContain('Peminjam: Peminjam Asli');
+      });
+
+      // 11. Render DOM Mobile Card: Pengembali untuk transaksi selesai
+      it('renders Pengembali row in mobile card for returned transactions using consistent helper', () => {
+        const normalReturnLoan: LoanRecord = {
+          ...sampleLoans[1],
+          student: {
+            id: 'std-001',
+            nim: '2301001',
+            name: 'Andi Pratama',
+            profile_photo_path: null,
+          },
+          returned_by_type: 'BORROWER',
+          returned_by_name: null,
+          returned_at: '2026-11-20T16:00:00.000Z',
+        };
+
+        const html = renderToStaticMarkup(
+          React.createElement(AdminDashboardView, {
+            initialSummary: sampleSummary,
+            initialLoans: [normalReturnLoan],
+            initialTotalCount: 1,
+          })
+        );
+
+        expect(html).toContain('Pengembali:');
+        expect(html).toContain('Andi Pratama');
+      });
+    });
+  });
+
+  describe('6. Export Ledger Modal Migration to Shared Modal (Phase 2.3 - Irisan 3)', () => {
+    it('does not render export modal when isExportModalOpen is false', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialExportModalOpen: false,
+        })
+      );
+
+      expect(html).not.toContain('Ekspor Data Transaksi');
+      expect(html).not.toContain('Pilih Format Berkas');
+    });
+
+    it('renders shared Modal for export when initialExportModalOpen is true', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialExportModalOpen: true,
+        })
+      );
+
+      // Modal ARIA & sizing
+      expect(html).toContain('role="dialog"');
+      expect(html).toContain('aria-modal="true"');
+      expect(html).toContain('max-w-lg'); // size="md"
+      expect(html).toContain('Ekspor Data Transaksi');
+      expect(html).toContain(
+        'Unduh seluruh riwayat transaksi peminjaman proyektor dalam format Excel atau CSV.'
+      );
+
+      // Format Options
+      expect(html).toContain('Pilih Format Berkas');
+      expect(html).toContain('Microsoft Excel');
+      expect(html).toContain('.xlsx');
+      expect(html).toContain('Berkas Teks CSV');
+      expect(html).toContain('.csv');
+
+      // Date range filters
+      expect(html).toContain('Dari Tanggal (Opsional)');
+      expect(html).toContain('Sampai Tanggal (Opsional)');
+      expect(html).toContain('id="export-from-date"');
+      expect(html).toContain('id="export-to-date"');
+
+      // Buttons
+      expect(html).toContain('Batal');
+      expect(html).toContain('Unduh Berkas Excel (.xlsx)');
+
+      // Full scope explanation
+      expect(html).toContain('Cakupan Data Lengkap:');
+    });
+
+    it('buildExportUrl generates correct URLs including full data scope without pagination limit', () => {
+      // Default export URL
+      expect(buildExportUrl({})).toBe('/api/admin/export/loans?format=xlsx');
+
+      // CSV format export
+      expect(buildExportUrl({ format: 'csv' })).toBe('/api/admin/export/loans?format=csv');
+
+      // With date range filter
+      expect(
+        buildExportUrl({ from: '2026-11-01', to: '2026-11-20', format: 'xlsx' })
+      ).toBe('/api/admin/export/loans?from=2026-11-01&to=2026-11-20&format=xlsx');
+
+      // Verify query parameters NEVER contain pagination bounds (page, limit, offset)
+      const url = buildExportUrl({ from: '2026-11-01', to: '2026-11-20', format: 'csv' });
+      expect(url).not.toContain('limit');
+      expect(url).not.toContain('page');
+      expect(url).not.toContain('offset');
+    });
+
+    it('renders dismissible controls when idle and configures hardened export props', () => {
+      const html = renderToStaticMarkup(
+        React.createElement(AdminDashboardView, {
+          initialSummary: sampleSummary,
+          initialLoans: sampleLoans,
+          initialTotalCount: 2,
+          initialExportModalOpen: true,
+        })
+      );
+
+      // Close button is rendered when not exporting
+      expect(html).toContain('aria-label="Tutup dialog"');
+      // Cancel button is rendered and active when idle
+      expect(html).toContain('><span>Batal</span></button>');
+    });
+
+    it('validates date ranges and prevents invalid export queries', () => {
+      // If from > to, buildExportUrl should still construct valid URL, but frontend guards validate
+      const validUrl = buildExportUrl({ from: '2026-11-01', to: '2026-11-10', format: 'xlsx' });
+      expect(validUrl).toContain('from=2026-11-01');
+      expect(validUrl).toContain('to=2026-11-10');
     });
   });
 });

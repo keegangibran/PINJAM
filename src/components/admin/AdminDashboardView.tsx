@@ -5,7 +5,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
-import { Button, Badge, LoadingSpinner, Card, EmptyState, Input } from '@/components/ui';
+import { Button, Badge, LoadingSpinner, Card, EmptyState, Input, Modal } from '@/components/ui';
 import {
   UserCheck,
   GraduationCap,
@@ -27,6 +27,12 @@ import {
   ChevronRight,
   Camera,
   Filter,
+  Database,
+  HardDrive,
+  PlayCircle,
+  FileSpreadsheet,
+  FileText,
+  Check,
 } from 'lucide-react';
 
 export interface SummaryData {
@@ -101,11 +107,71 @@ export interface MaintenanceStatusData {
     warning_active?: boolean;
     warning_threshold_pct?: number;
     max_capacity_bytes?: number;
+    last_checked_at?: string;
   } | null;
   academic_term: {
     current_term?: string;
     term_ends_at?: string;
   } | null;
+}
+
+/**
+ * Memformat identitas pengembali untuk ringkasan dan modal dokumentasi foto (FR-07):
+ * 1. Jika status ACTIVE atau belum dikembalikan, tampilkan "-".
+ * 2. Jika returned_by_type === "BORROWER", gunakan nama mahasiswa dari relasi data transaksi yang sebenarnya.
+ * 3. Jika returned_by_type === "REPRESENTATIVE", gunakan returned_by_name dan tampilkan "{nama} (Perwakilan)".
+ * 4. Jika data identitas pengembali tidak tersedia, tampilkan "-".
+ * 5. Jangan menggunakan nama mahasiswa sebagai fallback untuk REPRESENTATIVE.
+ * 6. Jangan mengarang nama atau mengubah data database.
+ */
+export function getReturnerDisplayText(loan: {
+  status?: string | null;
+  returned_at?: string | null;
+  returned_by_type?: 'BORROWER' | 'REPRESENTATIVE' | string | null;
+  returned_by_name?: string | null;
+  student?: {
+    name?: string | null;
+  } | null;
+} | null | undefined): string {
+  if (!loan) return '-';
+
+  // 1. Jika status ACTIVE atau belum dikembalikan, tampilkan "-"
+  if (loan.status === 'ACTIVE' || !loan.returned_at) {
+    return '-';
+  }
+
+  // 2. Jika returned_by_type === "BORROWER", gunakan nama mahasiswa dari relasi data transaksi yang sebenarnya
+  if (loan.returned_by_type === 'BORROWER') {
+    const studentName = loan.student?.name?.trim();
+    const explicitName = loan.returned_by_name?.trim();
+    return studentName || explicitName || '-';
+  }
+
+  // 3. Jika returned_by_type === "REPRESENTATIVE", gunakan returned_by_name dan tampilkan "{nama} (Perwakilan)"
+  // 5. Jangan menggunakan nama mahasiswa sebagai fallback untuk REPRESENTATIVE
+  if (loan.returned_by_type === 'REPRESENTATIVE') {
+    const repName = loan.returned_by_name?.trim();
+    if (!repName) {
+      return '-';
+    }
+    return `${repName} (Perwakilan)`;
+  }
+
+  // 4. Jika data identitas pengembali tidak tersedia atau tipe tidak dikenal, tampilkan "-"
+  const fallbackName = loan.returned_by_name?.trim();
+  return fallbackName || '-';
+}
+
+/**
+ * Format besaran byte menjadi representasi string terbaca (B, KB, MB, GB).
+ */
+export function formatBytes(bytes?: number): string {
+  if (typeof bytes !== 'number' || isNaN(bytes) || bytes < 0) return '-';
+  if (bytes === 0) return '0 B';
+  const k = 1024;
+  const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return `${parseFloat((bytes / Math.pow(k, i)).toFixed(1))} ${sizes[i]}`;
 }
 
 export function DamageNotesTooltip({ notes }: { notes: string }) {
@@ -235,6 +301,17 @@ export interface AdminDashboardViewProps {
   initialLoans?: LoanRecord[];
   initialTotalCount?: number;
   initialMaintenance?: MaintenanceStatusData | null;
+  initialMaintenanceError?: string | null;
+  initialPhotoModalLoan?: LoanRecord | null;
+  initialExportModalOpen?: boolean;
+}
+
+export function buildExportUrl(params: { from?: string; to?: string; format?: 'xlsx' | 'csv' }) {
+  const q = new URLSearchParams();
+  if (params.from) q.set('from', params.from);
+  if (params.to) q.set('to', params.to);
+  q.set('format', params.format || 'xlsx');
+  return `/api/admin/export/loans?${q.toString()}`;
 }
 
 export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function AdminDashboardView({
@@ -242,6 +319,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   initialLoans,
   initialTotalCount,
   initialMaintenance,
+  initialMaintenanceError,
+  initialPhotoModalLoan,
+  initialExportModalOpen,
 }: AdminDashboardViewProps = {}) {
   const [summary, setSummary] = useState<SummaryData>(
     initialSummary || {
@@ -274,6 +354,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   const [maintenanceData, setMaintenanceData] = useState<MaintenanceStatusData | null>(
     initialMaintenance || null
   );
+  const [maintenanceError, setMaintenanceError] = useState<string | null>(
+    initialMaintenanceError || null
+  );
   const [maintenanceRunning, setMaintenanceRunning] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState<string | null>(null);
 
@@ -282,7 +365,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   const [isRefreshing, setIsRefreshing] = useState(false);
 
   // Photo modal state
-  const [selectedLoanForPhotos, setSelectedLoanForPhotos] = useState<LoanRecord | null>(null);
+  const [photoModalLoan, setPhotoModalLoan] = useState<LoanRecord | null>(
+    initialPhotoModalLoan || null
+  );
   const [photoUrls, setPhotoUrls] = useState<{
     faceUrl: string | null;
     borrowUrl: string | null;
@@ -292,10 +377,35 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   }>({ faceUrl: null, borrowUrl: null, returnUrl: null, loading: false, error: null });
 
   // Export modal state
-  const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+  const [isExportModalOpen, setIsExportModalOpen] = useState(
+    initialExportModalOpen ?? false
+  );
   const [exportFrom, setExportFrom] = useState('');
   const [exportTo, setExportTo] = useState('');
   const [exportFormat, setExportFormat] = useState<'xlsx' | 'csv'>('xlsx');
+  const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const exportTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  const closeExportModal = useCallback(() => {
+    if (exportTimeoutRef.current) {
+      clearTimeout(exportTimeoutRef.current);
+      exportTimeoutRef.current = null;
+    }
+    setIsExportModalOpen(false);
+    setExportError(null);
+    setIsExporting(false);
+  }, []);
+
+  // Cleanup timer ekspor saat komponen unmount
+  useEffect(() => {
+    return () => {
+      if (exportTimeoutRef.current) {
+        clearTimeout(exportTimeoutRef.current);
+        exportTimeoutRef.current = null;
+      }
+    };
+  }, []);
 
   // Logout state
   const router = useRouter();
@@ -387,9 +497,12 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
       const json = await res.json();
       if (res.ok && json.data) {
         setMaintenanceData(json.data);
+        setMaintenanceError(null);
+      } else {
+        setMaintenanceError(json.error?.message || 'Gagal memuat status pemeliharaan.');
       }
     } catch {
-      // Non-blocking
+      setMaintenanceError('Gangguan jaringan saat memuat status pemeliharaan.');
     }
   }, []);
 
@@ -460,7 +573,7 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
   // Request signed URL saat membuka modal foto
   const openPhotoModal = async (loan: LoanRecord) => {
-    setSelectedLoanForPhotos(loan);
+    setPhotoModalLoan(loan);
     setPhotoUrls({ faceUrl: null, borrowUrl: null, returnUrl: null, loading: true, error: null });
 
     try {
@@ -498,18 +611,43 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
   };
 
   const closePhotoModal = () => {
-    setSelectedLoanForPhotos(null);
+    setPhotoModalLoan(null);
     setPhotoUrls({ faceUrl: null, borrowUrl: null, returnUrl: null, loading: false, error: null });
   };
 
   const handleExportSubmit = (format: 'xlsx' | 'csv' = exportFormat) => {
-    const params = new URLSearchParams();
-    if (exportFrom) params.set('from', exportFrom);
-    if (exportTo) params.set('to', exportTo);
-    params.set('format', format);
-    window.location.href = `/api/admin/export/loans?${params.toString()}`;
-    setIsExportModalOpen(false);
+    if (isExporting) return;
+    setExportError(null);
+
+    // Validasi rentang tanggal jika keduanya diisi
+    if (exportFrom && exportTo && exportFrom > exportTo) {
+      setExportError('Tanggal mulai tidak boleh lebih besar dari tanggal akhir.');
+      return;
+    }
+
+    // Bersihkan timer lama jika masih ada
+    if (exportTimeoutRef.current) {
+      clearTimeout(exportTimeoutRef.current);
+      exportTimeoutRef.current = null;
+    }
+
+    setIsExporting(true);
+    try {
+      const url = buildExportUrl({ from: exportFrom, to: exportTo, format });
+      window.location.href = url;
+      exportTimeoutRef.current = setTimeout(() => {
+        exportTimeoutRef.current = null;
+        setIsExporting(false);
+        closeExportModal();
+      }, 500);
+    } catch {
+      setExportError('Gagal memproses ekspor data transaksi.');
+      setIsExporting(false);
+    }
   };
+
+  const exportTransactionsToCSV = () => handleExportSubmit('csv');
+  const exportTransactionsToExcel = () => handleExportSubmit('xlsx');
 
   const triggerManualMaintenance = async () => {
     if (!confirm('Jalankan proses pembersihan retensi foto kedaluwarsa dan pemeliharaan sistem sekarang?')) {
@@ -537,8 +675,16 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
     }
   };
 
-  const storageUsagePct = maintenanceData?.storage_monitoring?.current_usage_pct || 0;
-  const isStorageWarning = maintenanceData?.storage_monitoring?.warning_active || storageUsagePct >= 70;
+  const hasStorageError = !!maintenanceError;
+  const storageMonitoring = maintenanceData?.storage_monitoring;
+  const isStorageMetricAvailable =
+    !hasStorageError &&
+    typeof storageMonitoring?.current_usage_pct === 'number' &&
+    !!storageMonitoring?.last_checked_at;
+
+  const storageUsagePct = isStorageMetricAvailable ? storageMonitoring.current_usage_pct! : 0;
+  const isStorageWarning =
+    isStorageMetricAvailable && (storageMonitoring.warning_active || storageUsagePct >= 70);
 
   return (
     <div className="min-h-screen p-4 sm:p-6 md:p-8 bg-canvas text-main">
@@ -811,126 +957,175 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
         {/* Warning Banner if Overdue Units Exist */}
         {summary.overdue_count > 0 && (
-          <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-rose-800">
+          <div className="p-4 bg-amber-50 border border-amber-200/90 rounded-card flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-amber-900 shadow-sm">
             <div className="flex items-center gap-3">
-              <div className="p-2 bg-rose-100 rounded-lg text-rose-700">
-                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                </svg>
+              <div className="p-2 bg-amber-100 rounded-element text-amber-800 shrink-0">
+                <AlertTriangle className="w-5 h-5" aria-hidden="true" />
               </div>
               <div>
-                <p className="text-sm font-semibold">Perhatian: {summary.overdue_count} unit proyektor melewati batas waktu pengembalian!</p>
-                <p className="text-xs text-rose-600">Unit belum dikembalikan hingga jam operasional TU hari peminjaman.</p>
+                <p className="text-sm font-semibold text-amber-900">
+                  Perhatian: {summary.overdue_count} unit proyektor melewati batas waktu pengembalian!
+                </p>
+                <p className="text-xs text-amber-700">
+                  Unit belum dikembalikan hingga jam operasional TU hari peminjaman.
+                </p>
               </div>
             </div>
-            <button
+            <Button
+              variant="outline"
+              size="sm"
               onClick={() => handleStatusFilterChange('OVERDUE')}
-              className="px-3 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-lg text-xs font-medium transition shadow-sm self-start sm:self-center"
+              className="bg-amber-600 hover:bg-amber-700 text-white border-transparent hover:text-white shadow-sm shrink-0 self-start sm:self-center"
             >
               Tampilkan Hanya Unit Terlambat
-            </button>
+            </Button>
           </div>
         )}
 
         {/* Scheduled Maintenance & Storage Quota Monitoring Section (FR-20, NFR-08, NFR-10) */}
-        <div className="p-3.5 sm:p-4 bg-white rounded-xl border border-slate-200 shadow-sm space-y-3">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-2 border-b border-slate-100">
-            <div className="flex items-center gap-2">
-              <span className="p-1.5 bg-slate-100 text-slate-700 rounded-lg">
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 7v10c0 2 1 3 3 3h10c2 0 3-1 3-3V7c0-2-1-3-3-3H7C5 4 4 5 4 7zm0 4h16M9 4v3m6-3v3" />
-                </svg>
+        <Card variant="default" padding="sm" className="space-y-3.5">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-borderline/70">
+            <div className="flex items-center gap-2.5">
+              <span className="p-2 bg-navy-50 text-navy-800 rounded-element border border-navy-100/60 shrink-0">
+                <Database className="w-4 h-4" aria-hidden="true" />
               </span>
               <div>
-                <h3 className="text-xs font-bold text-slate-800">Pemeliharaan Terjadwal &amp; Kuota Storage (NFR-10)</h3>
-                <p className="text-[11px] text-slate-500">
+                <h3 className="text-xs font-bold text-main">Pemeliharaan Terjadwal &amp; Kuota Storage (NFR-10)</h3>
+                <p className="text-[11px] text-muted">
                   Retensi harian foto kedaluwarsa &amp; pemantauan kapasitas media Supabase Free-Tier (1 GB).
                 </p>
               </div>
             </div>
 
             <div className="flex items-center gap-2 self-start sm:self-center">
-              <button
+              <Button
+                variant="outline"
+                size="sm"
                 onClick={triggerManualMaintenance}
                 disabled={maintenanceRunning}
-                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-medium transition flex items-center gap-1.5 disabled:opacity-50"
+                isLoading={maintenanceRunning}
+                loadingText="Memproses..."
+                leftIcon={!maintenanceRunning ? <PlayCircle className="w-3.5 h-3.5 text-navy-800" aria-hidden="true" /> : undefined}
+                className="self-start sm:self-center"
               >
-                <svg className={`w-3.5 h-3.5 ${maintenanceRunning ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                </svg>
-                {maintenanceRunning ? 'Memproses...' : 'Jalankan Retensi Sekarang'}
-              </button>
+                Jalankan Retensi Sekarang
+              </Button>
             </div>
           </div>
 
           {maintenanceMessage && (
-            <div className="p-2.5 bg-blue-50 border border-blue-200 rounded-lg text-xs text-blue-800">
-              {maintenanceMessage}
+            <div className="p-2.5 bg-brand-soft/60 border border-blue-200/80 rounded-element text-xs text-brand-primary flex items-center gap-2">
+              <CheckCircle2 className="w-4 h-4 shrink-0 text-brand-primary" aria-hidden="true" />
+              <span>{maintenanceMessage}</span>
             </div>
           )}
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 text-xs pt-1">
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4 text-xs pt-0.5">
             {/* Storage Quota Usage Meter */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-semibold text-slate-700">Pemakaian Kuota Storage</span>
-                <span className={`font-mono font-bold ${isStorageWarning ? 'text-amber-700' : 'text-slate-800'}`}>
-                  {storageUsagePct.toFixed(1)}% / 100%
-                </span>
-              </div>
-              <div className="w-full bg-slate-200 rounded-full h-2 overflow-hidden">
-                <div
-                  className={`h-2 rounded-full transition-all ${
-                    isStorageWarning ? 'bg-amber-500' : 'bg-emerald-500'
-                  }`}
-                  style={{ width: `${Math.min(storageUsagePct, 100)}%` }}
-                ></div>
-              </div>
-              <div className="flex items-center justify-between text-[11px] text-slate-500">
-                <span>Kapasitas: 1 GB</span>
-                {isStorageWarning && (
-                  <span className="text-amber-700 font-semibold">Melebihi batas 70%</span>
+            <div className="p-3 bg-canvas rounded-card border border-borderline/80 space-y-2.5">
+              <div className="flex items-center justify-between gap-2">
+                <div className="flex items-center gap-1.5 font-semibold text-main">
+                  <HardDrive className="w-3.5 h-3.5 text-muted shrink-0" aria-hidden="true" />
+                  <span>Pemakaian Kuota Storage</span>
+                </div>
+                {hasStorageError ? (
+                  <Badge variant="danger" size="sm">Gagal Memuat</Badge>
+                ) : !isStorageMetricAvailable ? (
+                  <Badge variant="neutral" size="sm">Belum Dihitung</Badge>
+                ) : (
+                  <span className={`font-mono font-bold ${isStorageWarning ? 'text-amber-700' : 'text-main'}`}>
+                    {storageUsagePct.toFixed(1)}% / 100%
+                  </span>
                 )}
               </div>
+              <div className="w-full bg-slate-200/80 rounded-full h-2 overflow-hidden">
+                <div
+                  className={`h-2 rounded-full transition-all duration-300 ${
+                    !isStorageMetricAvailable
+                      ? 'w-0'
+                      : isStorageWarning
+                      ? 'bg-amber-500'
+                      : 'bg-emerald-500'
+                  }`}
+                  style={{ width: isStorageMetricAvailable ? `${Math.min(storageUsagePct, 100)}%` : '0%' }}
+                ></div>
+              </div>
+              <div className="flex flex-wrap items-center justify-between gap-1 text-[11px] text-muted">
+                {hasStorageError ? (
+                  <>
+                    <span className="text-rose-600 font-medium">Gagal memuat metrik storage</span>
+                    <span>Kapasitas: 1 GB</span>
+                  </>
+                ) : !isStorageMetricAvailable ? (
+                  <>
+                    <span>Kapasitas: 1 GB</span>
+                    <span className="italic text-slate-500">Metrik belum tersedia</span>
+                  </>
+                ) : (
+                  <>
+                    <span>
+                      {storageMonitoring?.current_usage_bytes !== undefined
+                        ? `${formatBytes(storageMonitoring.current_usage_bytes)} / ${formatBytes(storageMonitoring?.max_capacity_bytes || 1073741824)}`
+                        : `Kapasitas: ${formatBytes(storageMonitoring?.max_capacity_bytes || 1073741824)}`}
+                    </span>
+                    {isStorageWarning ? (
+                      <span className="text-amber-700 font-semibold">Melebihi batas 70%</span>
+                    ) : storageMonitoring?.last_checked_at ? (
+                      <span>Pemeriksaan: {formatWib(storageMonitoring.last_checked_at, 'short')}</span>
+                    ) : null}
+                  </>
+                )}
+              </div>
+              {!isStorageMetricAvailable && !hasStorageError && (
+                <p className="text-[10px] text-slate-400 pt-0.5">
+                  Dihitung otomatis saat retensi harian atau klik &ldquo;Jalankan Retensi Sekarang&rdquo;.
+                </p>
+              )}
             </div>
 
             {/* Last Execution Info */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
-              <span className="font-semibold text-slate-700 block">Status Retensi Terakhir</span>
-              <p className="text-slate-800">
+            <div className="p-3 bg-canvas rounded-card border border-borderline/80 space-y-1.5">
+              <span className="font-semibold text-main block">Status Retensi Terakhir</span>
+              <p className="text-main text-[11px] sm:text-xs">
                 Waktu:{' '}
-                <span className="font-medium">
+                <span className="font-medium text-slate-800">
                   {maintenanceData?.retention_last_run?.last_run_at
                     ? formatWib(maintenanceData.retention_last_run.last_run_at, 'full')
                     : 'Belum pernah dijalankan'}
                 </span>
               </p>
               <div className="flex items-center gap-1.5 pt-0.5">
-                <span className="text-[11px] text-slate-500">Hasil:</span>
-                <span className={`inline-flex px-1.5 py-0.2 rounded text-[10px] font-bold ${
-                  maintenanceData?.retention_last_run?.status === 'SUCCESS'
-                    ? 'bg-emerald-100 text-emerald-800'
-                    : maintenanceData?.retention_last_run?.status === 'PARTIAL_FAILURE'
-                    ? 'bg-amber-100 text-amber-800'
-                    : 'bg-slate-200 text-slate-600'
-                }`}>
+                <span className="text-[11px] text-muted">Hasil:</span>
+                <Badge
+                  variant={
+                    maintenanceData?.retention_last_run?.status === 'SUCCESS'
+                      ? 'success'
+                      : maintenanceData?.retention_last_run?.status === 'PARTIAL_FAILURE'
+                      ? 'warning'
+                      : 'neutral'
+                  }
+                  size="sm"
+                >
                   {maintenanceData?.retention_last_run?.status || 'STANDBY'}
-                </span>
+                </Badge>
               </div>
             </div>
 
             {/* Routine Schedule & Auto Keep-Alive */}
-            <div className="p-3 bg-slate-50 rounded-lg border border-slate-200 space-y-1">
-              <span className="font-semibold text-slate-700 block">Jadwal Rutin Vercel Cron</span>
-              <p className="text-slate-800">
+            <div className="p-3 bg-canvas rounded-card border border-borderline/80 space-y-1.5">
+              <div className="flex items-center gap-1.5 font-semibold text-main">
+                <Clock className="w-3.5 h-3.5 text-muted" aria-hidden="true" />
+                <span>Jadwal Rutin Vercel Cron</span>
+              </div>
+              <p className="text-main text-[11px] sm:text-xs">
                 Pukul <span className="font-bold text-slate-900">02:00 WIB</span> setiap hari.
               </p>
-              <p className="text-[11px] text-slate-500">
+              <p className="text-[11px] text-muted leading-relaxed">
                 Menjaga project Supabase Free-Tier tetap aktif (<em>keep-alive</em>) dan menghapus dokumen &le; 24 jam &amp; foto transaksi &gt; 180 hari.
               </p>
             </div>
           </div>
-        </div>
+        </Card>
 
         {/* Filter & Search Bar (Fase 2.2 Balanced Navy Modern Redesign) */}
         <Card variant="default" padding="sm" className="space-y-3.5">
@@ -1412,11 +1607,11 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
 
                     {/* Staff & Returner info if returned */}
                     <div className="text-[11px] text-slate-500 space-y-0.5">
-                      {loan.returned_by_name && (
+                      {loan.returned_at && (
                         <p>
                           <span className="text-slate-400 font-medium">Pengembali:</span>{' '}
                           <span className="font-semibold text-slate-700">
-                            {loan.returned_by_name} ({loan.returned_by_type === 'BORROWER' ? 'Peminjam' : 'Perwakilan'})
+                            {getReturnerDisplayText(loan)}
                           </span>
                         </p>
                       )}
@@ -1535,55 +1730,65 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
       </div>
 
       {/* Side-by-Side Photo Comparison Modal (FT-03, FR-11, NFR-07) */}
-      {selectedLoanForPhotos && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-4xl w-full p-6 shadow-2xl max-h-[90vh] overflow-y-auto space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Dokumentasi Visual Transaksi</h3>
-                <p className="text-xs text-slate-500">
-                  Perbandingan manual foto wajah referensi, foto serah-terima pinjam, dan foto pengembalian.
-                </p>
-              </div>
-              <button
+      <Modal
+        isOpen={!!photoModalLoan}
+        onClose={closePhotoModal}
+        size="xl"
+        title="Dokumentasi Foto Transaksi"
+        description="Perbandingan manual foto wajah referensi, foto serah-terima pinjam, dan foto pengembalian."
+        footer={
+          photoModalLoan ? (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 w-full">
+              <p className="text-[11px] text-muted flex items-center gap-1.5">
+                <span className="shrink-0">🔒</span>
+                <span>Foto disimpan di bucket privat dan hanya diakses melalui signed URL sementara (60 detik).</span>
+              </p>
+              <Button
+                variant="primary"
+                size="sm"
                 onClick={closePhotoModal}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
+                className="self-end sm:self-auto shrink-0"
               >
-                ✕
-              </button>
+                Tutup
+              </Button>
             </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
+          ) : undefined
+        }
+      >
+        {photoModalLoan && (
+          <div className="space-y-4">
+            {/* Informasi Detail Transaksi */}
+            <div className="p-3 bg-canvas rounded-card border border-borderline text-xs space-y-1.5">
               <div className="flex flex-wrap items-center justify-between gap-2">
-                <span className="font-semibold text-slate-900">
-                  Unit: {selectedLoanForPhotos.projector?.code} ({selectedLoanForPhotos.projector?.name})
+                <span className="font-semibold text-main">
+                  Unit: {photoModalLoan.projector?.code} ({photoModalLoan.projector?.name})
                 </span>
-                <span className="text-slate-500">
-                  Pinjam: {formatWib(selectedLoanForPhotos.borrowed_at, 'full')}
+                <span className="text-muted">
+                  Pinjam: {formatWib(photoModalLoan.borrowed_at, 'full')}
                 </span>
               </div>
               <div className="flex flex-wrap items-center justify-between gap-2">
                 <span className="text-slate-700">
-                  Peminjam: {selectedLoanForPhotos.student?.name} (NIM {selectedLoanForPhotos.student?.nim})
+                  Peminjam: {photoModalLoan.student?.name} (NIM {photoModalLoan.student?.nim})
                 </span>
                 <span className="text-slate-700">
-                  Pengembali:{' '}
-                  {selectedLoanForPhotos.returned_by_name
-                    ? `${selectedLoanForPhotos.returned_by_name} (${selectedLoanForPhotos.returned_by_type === 'BORROWER' ? 'Peminjam' : 'Perwakilan'})`
-                    : '-'}
+                  Pengembali: {getReturnerDisplayText(photoModalLoan)}
                 </span>
               </div>
             </div>
 
+            {/* Error Message */}
             {photoUrls.error && (
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-lg text-xs text-rose-700">
-                {photoUrls.error}
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-card text-xs text-rose-700 flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" aria-hidden="true" />
+                <span>{photoUrls.error}</span>
               </div>
             )}
 
+            {/* Loading Spinner State */}
             {photoUrls.loading ? (
-              <div className="py-12 text-center text-sm text-slate-500">
-                <div className="inline-block animate-spin rounded-full h-6 w-6 border-2 border-slate-300 border-t-blue-600 mb-2"></div>
+              <div className="py-12 text-center text-sm text-muted space-y-2">
+                <LoadingSpinner size="md" variant="navy" className="mx-auto" />
                 <p>Membuat signed URL aman untuk foto (berlaku 60 detik)...</p>
               </div>
             ) : (
@@ -1595,9 +1800,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                     <span className="text-xs font-bold text-navy-900 leading-snug">
                       1. Foto Profil Terverifikasi
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-navy-50 text-navy-800 border border-navy-200/80 whitespace-nowrap">
+                    <Badge variant="primary" size="sm" className="shrink-0 whitespace-nowrap">
                       Referensi
-                    </span>
+                    </Badge>
                   </div>
 
                   {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
@@ -1628,9 +1833,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                     <span className="text-xs font-bold text-navy-900 leading-snug">
                       2. Foto Serah Terima Pinjam
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200 whitespace-nowrap">
+                    <Badge variant="default" size="sm" className="shrink-0 whitespace-nowrap bg-blue-50 text-blue-700 border-blue-200">
                       Kiosk Meja TU
-                    </span>
+                    </Badge>
                   </div>
 
                   {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
@@ -1661,9 +1866,9 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                     <span className="text-xs font-bold text-navy-900 leading-snug">
                       3. Foto Serah Terima Kembali
                     </span>
-                    <span className="shrink-0 text-[10px] font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200 whitespace-nowrap">
+                    <Badge variant="success" size="sm" className="shrink-0 whitespace-nowrap">
                       Kiosk Meja TU
-                    </span>
+                    </Badge>
                   </div>
 
                   {/* Area Foto dengan aspect ratio 3/4 yang konsisten */}
@@ -1688,113 +1893,188 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                 </div>
               </div>
             )}
+          </div>
+        )}
+      </Modal>
 
-            <div className="pt-3 border-t border-slate-200 flex items-center justify-between">
-              <p className="text-[11px] text-slate-400">
-                🔒 Foto disimpan di bucket privat dan hanya diakses melalui signed URL sementara (60 detik).
-              </p>
+      {/* Export Ledger Modal (NFR-08, FR-12) */}
+      <Modal
+        isOpen={isExportModalOpen}
+        onClose={closeExportModal}
+        size="md"
+        title="Ekspor Data Transaksi"
+        description="Unduh seluruh riwayat transaksi peminjaman proyektor dalam format Excel atau CSV."
+        closeOnEsc={!isExporting}
+        closeOnOverlayClick={!isExporting}
+        showCloseButton={!isExporting}
+        footer={
+          <div className="flex items-center justify-end gap-2.5 w-full">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={closeExportModal}
+              disabled={isExporting}
+            >
+              Batal
+            </Button>
+            <Button
+              variant="primary"
+              size="sm"
+              onClick={() => handleExportSubmit(exportFormat)}
+              disabled={isExporting}
+              isLoading={isExporting}
+              loadingText="Menyiapkan Berkas..."
+              leftIcon={<FileDown className="w-4 h-4 shrink-0" aria-hidden="true" />}
+              className="bg-navy-800 hover:bg-navy-900 text-white"
+            >
+              {exportFormat === 'xlsx' ? 'Unduh Berkas Excel (.xlsx)' : 'Unduh Berkas CSV (.csv)'}
+            </Button>
+          </div>
+        }
+      >
+        <div className="space-y-4">
+          {/* Format Selection Header & Cards */}
+          <div>
+            <label className="block text-xs font-semibold text-main mb-2">
+              Pilih Format Berkas
+            </label>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
+              {/* Excel Option */}
               <button
-                onClick={closePhotoModal}
-                className="px-4 py-1.5 bg-slate-800 hover:bg-slate-900 text-white rounded-lg text-xs font-medium transition"
+                type="button"
+                onClick={() => setExportFormat('xlsx')}
+                disabled={isExporting}
+                className={`p-3 rounded-card border text-left transition-all relative flex flex-col justify-between ${
+                  exportFormat === 'xlsx'
+                    ? 'border-navy-800 bg-navy-50/60 ring-2 ring-navy-800/15 shadow-xs'
+                    : 'border-borderline bg-surface hover:border-slate-300 hover:bg-canvas'
+                }`}
               >
-                Tutup
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`p-1.5 rounded-element ${
+                        exportFormat === 'xlsx'
+                          ? 'bg-navy-800 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <FileSpreadsheet className="w-4 h-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold text-main">Microsoft Excel</p>
+                      <p className="text-[10px] text-muted font-mono font-medium">.xlsx</p>
+                    </div>
+                  </div>
+                  {exportFormat === 'xlsx' && (
+                    <span className="w-4 h-4 rounded-full bg-navy-800 text-white flex items-center justify-center shrink-0">
+                      <Check className="w-2.5 h-2.5" />
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted leading-tight">
+                  Disertai styling tabel, header tebal, dan auto-filter kolom.
+                </p>
+              </button>
+
+              {/* CSV Option */}
+              <button
+                type="button"
+                onClick={() => setExportFormat('csv')}
+                disabled={isExporting}
+                className={`p-3 rounded-card border text-left transition-all relative flex flex-col justify-between ${
+                  exportFormat === 'csv'
+                    ? 'border-navy-800 bg-navy-50/60 ring-2 ring-navy-800/15 shadow-xs'
+                    : 'border-borderline bg-surface hover:border-slate-300 hover:bg-canvas'
+                }`}
+              >
+                <div className="flex items-start justify-between gap-2 mb-2">
+                  <div className="flex items-center gap-2">
+                    <span
+                      className={`p-1.5 rounded-element ${
+                        exportFormat === 'csv'
+                          ? 'bg-navy-800 text-white'
+                          : 'bg-slate-100 text-slate-600'
+                      }`}
+                    >
+                      <FileText className="w-4 h-4" aria-hidden="true" />
+                    </span>
+                    <div>
+                      <p className="text-xs font-bold text-main">Berkas Teks CSV</p>
+                      <p className="text-[10px] text-muted font-mono font-medium">.csv</p>
+                    </div>
+                  </div>
+                  {exportFormat === 'csv' && (
+                    <span className="w-4 h-4 rounded-full bg-navy-800 text-white flex items-center justify-center shrink-0">
+                      <Check className="w-2.5 h-2.5" />
+                    </span>
+                  )}
+                </div>
+                <p className="text-[11px] text-muted leading-tight">
+                  Format universal ringan (RFC 4180) dengan encoding UTF-8 BOM.
+                </p>
               </button>
             </div>
           </div>
-        </div>
-      )}
 
-      {/* Export Ledger Modal (NFR-08, FR-12) */}
-      {isExportModalOpen && (
-        <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center p-4">
-          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl space-y-4">
-            <div className="flex items-center justify-between pb-3 border-b border-slate-200">
-              <div>
-                <h3 className="text-lg font-bold text-slate-900">Ekspor Buku Besar Digital</h3>
-                <p className="text-xs text-slate-500">Unduh riwayat transaksi peminjaman proyektor.</p>
-              </div>
-              <button
-                onClick={() => setIsExportModalOpen(false)}
-                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="space-y-3 text-xs">
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Format Berkas</label>
-                <div className="grid grid-cols-2 gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setExportFormat('xlsx')}
-                    className={`py-2 px-3 border rounded-xl text-center font-medium transition flex items-center justify-center gap-1.5 ${
-                      exportFormat === 'xlsx'
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>📊 Excel (.xlsx)</span>
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setExportFormat('csv')}
-                    className={`py-2 px-3 border rounded-xl text-center font-medium transition flex items-center justify-center gap-1.5 ${
-                      exportFormat === 'csv'
-                        ? 'border-emerald-600 bg-emerald-50 text-emerald-800 ring-2 ring-emerald-600/20'
-                        : 'border-slate-200 bg-white text-slate-700 hover:bg-slate-50'
-                    }`}
-                  >
-                    <span>📄 CSV (.csv)</span>
-                  </button>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Dari Tanggal (Opsional)</label>
+          {/* Date Filter Range */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div className="space-y-1.5">
+              <label htmlFor="export-from-date" className="block text-xs font-semibold text-main">
+                Dari Tanggal (Opsional)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-muted">
+                  <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                </span>
                 <input
+                  id="export-from-date"
                   type="date"
                   value={exportFrom}
                   onChange={(e) => setExportFrom(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 bg-white"
+                  disabled={isExporting}
+                  className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-element border border-borderline bg-surface text-main focus:outline-none focus:ring-2 focus:ring-navy-800/20 focus:border-navy-800 transition disabled:opacity-50"
                 />
               </div>
+            </div>
 
-              <div>
-                <label className="block font-medium text-slate-700 mb-1">Sampai Tanggal (Opsional)</label>
+            <div className="space-y-1.5">
+              <label htmlFor="export-to-date" className="block text-xs font-semibold text-main">
+                Sampai Tanggal (Opsional)
+              </label>
+              <div className="relative">
+                <span className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none text-muted">
+                  <Calendar className="w-3.5 h-3.5" aria-hidden="true" />
+                </span>
                 <input
+                  id="export-to-date"
                   type="date"
                   value={exportTo}
                   onChange={(e) => setExportTo(e.target.value)}
-                  className="w-full px-3 py-2 border border-slate-200 rounded-xl text-xs text-slate-800 bg-white"
+                  disabled={isExporting}
+                  className="w-full pl-8 pr-2.5 py-1.5 text-xs rounded-element border border-borderline bg-surface text-main focus:outline-none focus:ring-2 focus:ring-navy-800/20 focus:border-navy-800 transition disabled:opacity-50"
                 />
               </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-slate-500 text-[11px] leading-relaxed">
-                Berkas ekspor mencakup data lengkap transaksi: waktu pinjam/kembali (WIB), identitas peminjam, kelas, kode proyektor, nama pengembali, catatan kendala, dan nama petugas TU.
-              </div>
             </div>
+          </div>
 
-            <div className="pt-3 border-t border-slate-200 flex justify-end gap-2">
-              <button
-                onClick={() => setIsExportModalOpen(false)}
-                className="px-4 py-2 border border-slate-300 text-slate-700 hover:bg-slate-50 rounded-xl text-xs font-medium transition"
-              >
-                Batal
-              </button>
-              <button
-                onClick={() => handleExportSubmit(exportFormat)}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-medium transition flex items-center gap-1.5 shadow-sm"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                </svg>
-                {exportFormat === 'xlsx' ? 'Unduh Berkas Excel (.xlsx)' : 'Unduh Berkas CSV (.csv)'}
-              </button>
+          {/* Error Message */}
+          {exportError && (
+            <div className="p-3 bg-rose-50 border border-rose-200 rounded-card text-xs text-rose-700 flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 shrink-0 text-rose-600" aria-hidden="true" />
+              <span>{exportError}</span>
+            </div>
+          )}
+
+          {/* Information Callout */}
+          <div className="p-3 bg-canvas rounded-card border border-borderline/80 text-muted text-[11px] leading-relaxed flex items-start gap-2">
+            <span className="text-navy-800 shrink-0 mt-0.5">ℹ️</span>
+            <div>
+              <span className="font-semibold text-main">Cakupan Data Lengkap:</span> Berkas ekspor mencakup seluruh transaksi yang sesuai filter tanggal (waktu pinjam/kembali WIB, identitas peminjam, kelas, kode proyektor, nama pengembali, catatan kendala, dan nama petugas TU) tanpa dibatasi halaman paginasi.
             </div>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 };
