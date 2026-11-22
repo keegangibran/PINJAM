@@ -4,6 +4,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { QRCodeSVG } from 'qrcode.react';
+import ClaimClassModal from '@/components/student/ClaimClassModal';
 
 interface QrData {
   token: string;
@@ -31,6 +32,30 @@ interface Classmate {
   nim: string;
 }
 
+interface ClassOption {
+  id: string;
+  study_program: string;
+  cohort_year: number;
+  section: string;
+  academic_term: string;
+}
+
+interface PendingClaimInfo {
+  id: string;
+  class_id: string;
+  claim_type: 'INITIAL' | 'REPLACEMENT' | 'TRANSFER';
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'CANCELLED';
+  notes: string | null;
+  created_at: string;
+  class?: {
+    id: string;
+    study_program: string;
+    cohort_year: number;
+    section: string;
+    academic_term: string;
+  };
+}
+
 export default function MyQrPassPage() {
   const [qrData, setQrData] = useState<QrData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +78,19 @@ export default function MyQrPassPage() {
   const [isTransferring, setIsTransferring] = useState(false);
   const [transferError, setTransferError] = useState<string | null>(null);
   const [transferSuccess, setTransferSuccess] = useState<boolean>(false);
+
+  // New Academic Term Claim Modal State (FR-01F)
+  const [showClaimModal, setShowClaimModal] = useState(false);
+  const [availableClasses, setAvailableClasses] = useState<ClassOption[]>([]);
+  const [loadingClasses, setLoadingClasses] = useState(false);
+  const [selectedClassId, setSelectedClassId] = useState<string>('');
+  const [claimNotes, setClaimNotes] = useState<string>('');
+  const [claimConsentConfirmed, setClaimConsentConfirmed] = useState(false);
+  const [isSubmittingClaim, setIsSubmittingClaim] = useState(false);
+  const [claimError, setClaimError] = useState<string | null>(null);
+  const [claimSuccess, setClaimSuccess] = useState(false);
+  const [claimSuccessMessage, setClaimSuccessMessage] = useState<string | null>(null);
+  const [pendingClaim, setPendingClaim] = useState<PendingClaimInfo | null>(null);
 
   // Logout state
   const router = useRouter();
@@ -134,9 +172,23 @@ export default function MyQrPassPage() {
     }
   }, []);
 
+  // Fetch pending claim status (FR-01F)
+  const fetchClaimStatus = useCallback(async () => {
+    try {
+      const res = await fetch('/api/students/me/leader/claim');
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setPendingClaim(json.data.pendingClaim || null);
+      }
+    } catch {
+      // Abaikan jika offline / fetch gagal
+    }
+  }, []);
+
   useEffect(() => {
     fetchQrToken();
-  }, [fetchQrToken]);
+    fetchClaimStatus();
+  }, [fetchQrToken, fetchClaimStatus]);
 
   // Countdown timer & auto-refresh at 45s (sisa 15s)
   const isFetchingRef = useRef(false);
@@ -249,6 +301,71 @@ export default function MyQrPassPage() {
     }
   };
 
+  // Open Claim Semester Modal & fetch active classes (FR-01F)
+  const handleOpenClaimModal = async () => {
+    setShowClaimModal(true);
+    setLoadingClasses(true);
+    setClaimError(null);
+    setClaimSuccess(false);
+    setClaimConsentConfirmed(false);
+    setClaimNotes('');
+    try {
+      const res = await fetch('/api/classes');
+      const json = await res.json();
+      if (res.ok && json.data) {
+        setAvailableClasses(json.data);
+        if (json.data.length > 0) {
+          setSelectedClassId(json.data[0].id);
+        }
+      } else {
+        setClaimError(json.error?.message || 'Gagal memuat daftar kelas aktif.');
+      }
+    } catch {
+      setClaimError('Gangguan jaringan saat memuat daftar kelas.');
+    } finally {
+      setLoadingClasses(false);
+    }
+  };
+
+  // Execute Claim Semester Baru (FR-01F)
+  const handleExecuteClaim = async () => {
+    if (!selectedClassId) {
+      setClaimError('Pilih kelas akademik yang ingin Anda klaim.');
+      return;
+    }
+    if (!claimConsentConfirmed) {
+      setClaimError('Konfirmasi keabsahan sebagai ketua kelas wajib dicentang.');
+      return;
+    }
+
+    setIsSubmittingClaim(true);
+    setClaimError(null);
+    try {
+      const res = await fetch('/api/students/me/leader/claim', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          class_id: selectedClassId,
+          notes: claimNotes || undefined,
+        }),
+      });
+
+      const json = await res.json();
+
+      if (!res.ok) {
+        setClaimError(json.error?.message || 'Gagal mengajukan klaim ketua kelas.');
+      } else {
+        setClaimSuccess(true);
+        setClaimSuccessMessage(json.message);
+        fetchClaimStatus();
+      }
+    } catch {
+      setClaimError('Terjadi gangguan jaringan saat mengirim permohonan klaim.');
+    } finally {
+      setIsSubmittingClaim(false);
+    }
+  };
+
   return (
     <div className="min-h-screen bg-slate-100 flex flex-col justify-between p-4 sm:p-6 text-slate-800">
       <div className="max-w-md w-full mx-auto space-y-4">
@@ -349,11 +466,77 @@ export default function MyQrPassPage() {
             )}
 
             {error.code === 'NOT_CLASS_LEADER' && (
-              <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-left text-xs text-amber-800">
-                <p className="font-semibold mb-1">Status Bukan Ketua Kelas Aktif:</p>
-                <p>
-                  QR Pass peminjaman hanya dapat diakses oleh ketua kelas aktif yang terdaftar pada semester berjalan.
-                </p>
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-left text-xs text-amber-800">
+                  <p className="font-semibold mb-1">Status Bukan Ketua Kelas Aktif:</p>
+                  <p>
+                    QR Pass peminjaman hanya dapat diakses oleh ketua kelas aktif yang terdaftar pada semester berjalan.
+                  </p>
+                </div>
+
+                {pendingClaim ? (
+                  <div className="p-4 bg-blue-50 border border-blue-200 rounded-2xl text-left space-y-2">
+                    <div className="flex items-center gap-2">
+                      <span className="flex h-2.5 w-2.5 relative">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-2.5 w-2.5 bg-amber-500"></span>
+                      </span>
+                      <span className="text-xs font-bold text-blue-900">Permohonan Klaim Sedang Ditinjau Petugas</span>
+                    </div>
+                    <p className="text-xs text-blue-800 leading-relaxed">
+                      Anda telah mengajukan klaim ketua kelas untuk rombel{' '}
+                      <strong className="font-semibold text-blue-950">
+                        {pendingClaim.class
+                          ? `${pendingClaim.class.study_program} (${pendingClaim.class.cohort_year}-${pendingClaim.class.section})`
+                          : 'Semester Baru'}
+                      </strong>{' '}
+                      {pendingClaim.class?.academic_term && `(${pendingClaim.class.academic_term})`}.
+                    </p>
+                    <div className="flex items-center justify-between pt-1 text-[11px] text-blue-700">
+                      <span>
+                        Tipe:{' '}
+                        <strong className="font-semibold">
+                          {pendingClaim.claim_type === 'INITIAL' ? 'Ketua Pertama (INITIAL)' : 'Penggantian (REPLACEMENT)'}
+                        </strong>
+                      </span>
+                      <span className="inline-block px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 font-semibold border border-amber-200">
+                        Menunggu Verifikasi TU
+                      </span>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="pt-1">
+                    <button
+                      type="button"
+                      onClick={handleOpenClaimModal}
+                      className="w-full py-2.5 px-3 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                    >
+                      <span>🎓</span>
+                      <span>Ajukan Klaim Ketua Kelas Semester Baru</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {error.code === 'NO_CLASS_ASSIGNED' && (
+              <div className="space-y-3">
+                <div className="p-3 bg-amber-50 border border-amber-100 rounded-xl text-left text-xs text-amber-800">
+                  <p className="font-semibold mb-1">Belum Terdaftar di Kelas Akademik:</p>
+                  <p>
+                    Akun Anda belum terhubung ke kelas akademik semester berjalan. Silakan ajukan klaim kelas.
+                  </p>
+                </div>
+                <div className="pt-1">
+                  <button
+                    type="button"
+                    onClick={handleOpenClaimModal}
+                    className="w-full py-2.5 px-3 rounded-xl bg-blue-600 text-white text-xs font-semibold hover:bg-blue-700 transition-colors flex items-center justify-center gap-1.5 shadow-sm"
+                  >
+                    <span>🎓</span>
+                    <span>Pilih & Klaim Kelas Akademik</span>
+                  </button>
+                </div>
               </div>
             )}
 
@@ -456,6 +639,41 @@ export default function MyQrPassPage() {
                 <span>Alihkan Jabatan</span>
               </button>
             </div>
+
+            {/* Klaim Semester Baru Button */}
+            <div className="pt-1">
+              <button
+                type="button"
+                onClick={handleOpenClaimModal}
+                className="w-full py-2.5 px-3 rounded-xl border border-blue-200 bg-blue-50 text-blue-700 text-xs font-semibold hover:bg-blue-100 transition-colors flex items-center justify-center gap-1.5"
+              >
+                <span>🎓</span>
+                <span>Klaim Semester Baru (FR-01F)</span>
+              </button>
+            </div>
+
+            {/* Pending Claim Banner if present on active leader */}
+            {pendingClaim && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-left text-xs text-amber-900 space-y-1">
+                <div className="flex items-center gap-1.5 font-semibold text-amber-800">
+                  <span className="flex h-2 w-2 relative">
+                    <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-amber-400 opacity-75"></span>
+                    <span className="relative inline-flex rounded-full h-2 w-2 bg-amber-500"></span>
+                  </span>
+                  <span>Permohonan Klaim Semester Baru Diajukan:</span>
+                </div>
+                <p className="text-[11px] text-amber-800">
+                  Rombel:{' '}
+                  <strong>
+                    {pendingClaim.class
+                      ? `${pendingClaim.class.study_program} (${pendingClaim.class.cohort_year}-${pendingClaim.class.section})`
+                      : 'Kelas terpilih'}
+                  </strong>{' '}
+                  {pendingClaim.class?.academic_term && `(${pendingClaim.class.academic_term})`}
+                </p>
+                <p className="text-[10px] text-amber-700">Status: Menunggu verifikasi TU (Pending)</p>
+              </div>
+            )}
           </div>
         )}
       </div>
@@ -607,6 +825,30 @@ export default function MyQrPassPage() {
           </div>
         </div>
       )}
+
+      {/* New Academic Term Claim Modal (FR-01F) */}
+      <ClaimClassModal
+        isOpen={showClaimModal}
+        onClose={() => {
+          setShowClaimModal(false);
+          setClaimSuccess(false);
+          fetchClaimStatus();
+          fetchQrToken(false);
+        }}
+        availableClasses={availableClasses}
+        loadingClasses={loadingClasses}
+        selectedClassId={selectedClassId}
+        onSelectClassId={setSelectedClassId}
+        claimNotes={claimNotes}
+        onChangeNotes={setClaimNotes}
+        claimConsentConfirmed={claimConsentConfirmed}
+        onToggleConsent={setClaimConsentConfirmed}
+        isSubmittingClaim={isSubmittingClaim}
+        claimError={claimError}
+        claimSuccess={claimSuccess}
+        claimSuccessMessage={claimSuccessMessage}
+        onSubmit={handleExecuteClaim}
+      />
 
       {/* Footer Info */}
       <div className="text-center py-4 text-[11px] text-slate-400">

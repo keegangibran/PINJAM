@@ -20,11 +20,14 @@ export type AuditAction =
   | 'SETTINGS_UPDATED'
   | 'LOANS_EXPORTED'
   | 'RETENTION_CLEANUP_EXECUTED'
-  | 'STORAGE_WARNING';
+  | 'STORAGE_WARNING'
+  | 'STAFF_CREATED'
+  | 'STAFF_ACTIVATED'
+  | 'STAFF_DEACTIVATED';
 
 export interface AuditLogParams {
   action: AuditAction;
-  entityType: 'students' | 'classes' | 'projectors' | 'loans' | 'class_leader_claims' | 'storage' | 'app_settings' | 'kiosk_sessions';
+  entityType: 'students' | 'classes' | 'projectors' | 'loans' | 'class_leader_claims' | 'storage' | 'app_settings' | 'kiosk_sessions' | 'staff_profiles';
   entityId?: string | null;
   actorStaffId?: string | null;
   actorStudentId?: string | null;

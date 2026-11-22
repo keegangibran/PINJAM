@@ -7,6 +7,8 @@ import Link from 'next/link';
 import { formatWib } from '@/lib/timezone';
 import { Button, Badge, LoadingSpinner, Card, EmptyState, Input, Modal } from '@/components/ui';
 import {
+  History,
+  Users,
   UserCheck,
   GraduationCap,
   Layers,
@@ -729,6 +731,20 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
               >
                 <Layers size={14} className="text-slate-500 shrink-0" />
                 <span className="truncate">Inventaris Proyektor</span>
+              </Link>
+              <Link
+                href="/admin/staff"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
+              >
+                <Users size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Kelola Staf</span>
+              </Link>
+              <Link
+                href="/admin/audit-logs"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
+              >
+                <History size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Jejak Audit</span>
               </Link>
               <Link
                 href="/kiosk"

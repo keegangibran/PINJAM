@@ -9,6 +9,78 @@ const claimSchema = z.object({
   notes: z.string().max(300).optional(),
 });
 
+/**
+ * GET /api/students/me/leader/claim
+ * Mengambil riwayat klaim ketua kelas dan permohonan pending mahasiswa saat ini.
+ */
+export async function GET() {
+  try {
+    const userContext = await requireStudent();
+    const studentProfile = userContext.studentProfile;
+
+    if (!studentProfile) {
+      return NextResponse.json(
+        { error: { code: 'PROFILE_NOT_FOUND', message: 'Profil mahasiswa belum dibuat.' } },
+        { status: 404 }
+      );
+    }
+
+    const adminClient = createAdminClient();
+    const { data: claims, error } = await adminClient
+      .from('class_leader_claims')
+      .select(`
+        id,
+        class_id,
+        claim_type,
+        status,
+        notes,
+        created_at,
+        updated_at,
+        class:classes (
+          id,
+          study_program,
+          cohort_year,
+          section,
+          academic_term,
+          is_active
+        )
+      `)
+      .eq('student_id', studentProfile.id)
+      .order('created_at', { ascending: false })
+      .limit(5);
+
+    if (error) {
+      return NextResponse.json(
+        { error: { code: 'FETCH_CLAIMS_FAILED', message: error.message } },
+        { status: 500 }
+      );
+    }
+
+    const pendingClaim = claims?.find((c: any) => c.status === 'PENDING') || null;
+
+    return NextResponse.json({
+      success: true,
+      data: {
+        claims: claims || [],
+        pendingClaim,
+      },
+    });
+  } catch (err: any) {
+    const status = err.statusCode || 500;
+    return NextResponse.json(
+      { error: { code: err.code || 'SERVER_ERROR', message: err.message } },
+      { status }
+    );
+  }
+}
+/**
+ * POST /api/students/me/leader/claim
+ * Mengajukan klaim ketua kelas untuk semester baru atau kelas pergantian.
+ * Sesuai PRD FR-01D dan FR-01F:
+ * - Hanya mahasiswa ACTIVE yang diizinkan.
+ * - Tidak memerlukan foto ulang jika akun sudah terverifikasi ACTIVE.
+ * - Mencegah klaim duplikat (409) dan kepemimpinan ganda (400).
+ */
 export async function POST(request: Request) {
   try {
     const userContext = await requireStudent();
@@ -67,7 +139,36 @@ export async function POST(request: Request) {
       );
     }
 
-    // 2. Hubungkan mahasiswa ke kelas baru jika berganti kelas
+    // 2. Cegah klaim jika mahasiswa sudah menjadi ketua aktif kelas ini
+    if (targetClass.leader_student_id === studentProfile.id) {
+      return NextResponse.json(
+        { error: { code: 'ALREADY_CLASS_LEADER', message: 'Anda sudah menjadi ketua aktif pada kelas ini.' } },
+        { status: 400 }
+      );
+    }
+
+    // 3. Cegah pengajuan duplikat jika mahasiswa sudah memiliki klaim PENDING pada kelas ini
+    const { data: existingStudentClaim } = await adminClient
+      .from('class_leader_claims')
+      .select('id, status')
+      .eq('class_id', class_id)
+      .eq('student_id', studentProfile.id)
+      .eq('status', 'PENDING')
+      .maybeSingle();
+
+    if (existingStudentClaim) {
+      return NextResponse.json(
+        {
+          error: {
+            code: 'DUPLICATE_CLAIM',
+            message: 'Anda sudah memiliki permohonan klaim ketua kelas yang sedang menunggu keputusan petugas.',
+          },
+        },
+        { status: 409 }
+      );
+    }
+
+    // 4. Hubungkan mahasiswa ke kelas baru jika berganti kelas
     await adminClient
       .from('students')
       .update({
@@ -76,7 +177,7 @@ export async function POST(request: Request) {
       })
       .eq('id', studentProfile.id);
 
-    // 3. Tentukan tipe klaim: INITIAL atau REPLACEMENT
+    // 5. Tentukan tipe klaim: INITIAL atau REPLACEMENT
     let claimType: 'INITIAL' | 'REPLACEMENT' = 'INITIAL';
 
     if (targetClass.leader_student_id) {
@@ -97,7 +198,7 @@ export async function POST(request: Request) {
       }
     }
 
-    // 4. Masukkan baris klaim baru
+    // 6. Masukkan baris klaim baru
     const { data: newClaim, error: claimError } = await adminClient
       .from('class_leader_claims')
       .insert({
