@@ -1,10 +1,12 @@
 # PINJAM — Master UAT Operational Runbook (Authoritative Guide)
 
 **Project:** Sistem Peminjaman Proyektor Pintar (PINJAM)  
-**Document Version:** 2.1.0 (Master Authoritative Runbook — Corrected)  
-**Date:** 2026-11-23  
+**Document Version:** 2.3.0 (Safety Aligned & Consistency Audited)  
+**Date:** 2026-11-24  
 **Target Environment:** Staging Canonical (`https://pinjam-staging-git-staging-keegangibrans-projects.vercel.app`)  
-**Commit Reference:** `5e470fdce4069c7067d5ee4c4247684e61ed7b85` (Plus Unstaged Idempotency & Concurrency Hardening)  
+**Commit Reference:** `58ec98d3bd3a39b2b51fa655eb9bffc31a14ffe7` (Release Candidate on `origin/staging`)  
+**Deployment Verification Status:** `NOT VERIFIED / PENDING` (Menunggu bukti Vercel Dashboard dari Pemilik Sistem)  
+**Database Verification Status:** `HISTORICAL BASELINE (STAGE 23.6)` (Pemeriksaan read-only live wajib dilakukan tepat sebelum UAT)  
 **Total Skenario UAT:** **Tepat 37 Skenario Definitif**  
 
 ---
@@ -42,13 +44,13 @@
 
 #### 3. Akun Mahasiswa 1 (Calon Ketua Kelas Awal)
 - **Identitas Uji:** Nama: `[NAMA_PENGUJI_1]`, NIM: `[NIM_PENGUJI_1]`, Email: `[EMAIL_UTAMA]+mhs1@gmail.com`, Password: `[PASSWORD_PENGUJI_1]`.
-- **Target Kelas:** `Kelas Uji A` (Prodi Ilmu Komputer, Angkatan 2025, Rombel C, Semester 2026/2027-GANJIL).
+- **Target Kelas:** `Kelas Uji A` (Prodi Ilmu Komputer, Angkatan 2025, Rombel C, Semester `2026/2027-UAT-GANJIL`).
 - **Aset Fisik / Input:** Webcam perangkat untuk tangkapan wajah hidup dan kartu identitas fisik (KTM atau KTP).
 - **Prosedur Lengkap:** Dijalankan secara bertahap pada Skenario `UAT-REG-01` s/d `UAT-REG-04`, lalu diverifikasi dan disetujui Admin pada `UAT-VER-01`.
 
 #### 4. Akun Mahasiswa 2 (Anggota Kelas & Target Suksesi)
 - **Identitas Uji:** Nama: `[NAMA_PENGUJI_2]`, NIM: `[NIM_PENGUJI_2]`, Email: `[EMAIL_UTAMA]+mhs2@gmail.com`, Password: `[PASSWORD_PENGUJI_2]`.
-- **Target Kelas:** `Kelas Uji A` (sama persis dengan kelas Mahasiswa 1).
+- **Target Kelas:** `Kelas Uji A` (sama persis dengan kelas Mahasiswa 1 pada semester `2026/2027-UAT-GANJIL`).
 - **Prosedur Lengkap:**
   1. Pada Profil Browser 2, akses `/register`.
   2. Isi formulir dengan data Mahasiswa 2, pilih `Kelas Uji A`, centang persetujuan foto, dan submit.
@@ -59,13 +61,13 @@
 
 #### 5. Akun Mahasiswa 3 (Akun Kasus Negatif)
 - **Identitas Uji:** Nama: `[NAMA_PENGUJI_3]`, NIM: `[NIM_PENGUJI_3]`, Email: `[EMAIL_UTAMA]+mhs3@gmail.com`, Password: `[PASSWORD_PENGUJI_3]`.
-- **Target Kelas:** `Kelas Uji A`.
+- **Target Kelas:** `Kelas Uji A` (pada semester `2026/2027-UAT-GANJIL`).
 - **Prosedur Lengkap:**
   1. Pada Profil Browser 2, akses `/register`, daftarkan Mahasiswa 3 pada `Kelas Uji A`, centang persetujuan foto, submit.
   2. Buka kotak masuk email konfirmasi alias `+mhs3`, klik tautan aktivasi.
   3. Ambil foto wajah live.
   4. Pada langkah foto dokumen identitas, hadapkan dokumen dengan posisi tidak fokus / sengaja digerakkan agar citra buram (*blurry*). Kirim berkas pendaftaran.
-  5. Akun berstatus `PENDING_REVIEW` dan siap digunakan untuk pengujian permintaan unggah ulang (`UAT-VER-03`) serta penolakan final dengan alasan wajib (`UAT-VER-02`).
+  5. Akun berstatus `PENDING_REVIEW` dan siap digunakan untuk pengujian permintaan unggah ulang (`UAT-VER-03`), pengambilan & unggah ulang foto dokumen/wajah oleh mahasiswa, serta penolakan final oleh admin dengan alasan wajib (`UAT-VER-02`).
 
 ---
 
@@ -92,12 +94,13 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
 ### FASE 1: PRE-UAT SETUP (Prosedur Persiapan Lingkungan)
 *(Bukan Skenario UAT)*
 
-- **Langkah 1.1 — Pembuatan Master Kelas Uji (`Kelas Uji A`):**
+- **Langkah 1.1 — Pembuatan Master Kelas Uji Terisolasi (`Kelas Uji A`):**
   1. Login ke `/admin/classes` menggunakan akun Admin resmi.
   2. Klik tombol "Tambah Kelas".
-  3. Masukkan data: Program Studi `Ilmu Komputer`, Angkatan `2025`, Rombel `C`, Semester `2026/2027-GANJIL`.
+  3. Masukkan data: Program Studi `Ilmu Komputer`, Angkatan `2025`, Rombel `C`, Semester `2026/2027-UAT-GANJIL`.
   4. Simpan kelas. Verifikasi bahwa `Kelas Uji A` terdaftar dengan `leader_student_id = null`.
-  *Tujuan:* Mengisolasi seluruh pengujian Mahasiswa 1 dan Mahasiswa 2 pada satu kelas bersama tanpa menyentuh kelas historis.
+  *Tujuan:* Mengisolasi seluruh pengujian Mahasiswa 1 dan Mahasiswa 2 pada semester pengujian terisolasi (`2026/2027-UAT-GANJIL`) tanpa menyentuh kelas operasional kampus.
+  *Catatan Keselamatan:* Nama semester `2026/2027-UAT-GANJIL` (panjang tepat 20 karakter, pas dengan batas `classes.academic_term varchar(20)`). Sebelum eksekusi, pemeriksaan database read-only wajib memastikan bahwa semester ini belum memuat kelas operasional riil kampus. Jangan berasumsi risiko sudah nol hanya berdasarkan penamaan.
 
 ---
 
@@ -181,29 +184,33 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   5. Klik tombol "Setujui Pendaftaran".
   6. Periksa direktori bucket storage untuk memverifikasi file foto dokumen telah terhapus permanen.
 - **Expected Result:** Status Mahasiswa 1 berubah menjadi `ACTIVE`; foto dokumen identitas di storage dihapus permanen seketika (NFR-08); foto wajah referensi tetap tersimpan aman.
-- **Evidence:** Screenshot modal approval dengan 3 checklist manual dan bukti file dokumen terhapus di storage.
+- **Evidence:** Screenshot modal approval dengan 3 checklist manual dan bukti file dokumen terhapus di storage (pastikan dokumen uji tidak memuat data pribadi pihak ketiga; informasi sensitif wajib disamarkan).
 
-#### Langkah 3.2 — UAT-VER-03: Admin Request Resubmission for Blurry ID Card
-- **Precondition:** Mahasiswa 3 telah mendaftar dengan foto dokumen yang sengaja dibuat buram (dari Prosedur Bagian 1.C.5).
+#### Langkah 3.2 — UAT-VER-03: Admin Request Resubmission for Blurry ID Card & Student Re-upload Flow
+- **Precondition:** Mahasiswa 3 telah mendaftar dengan foto dokumen yang sengaja dibuat buram (dari Prosedur Bagian 1.C.5) sehingga berkas berada di antrean verifikasi Admin dengan status awal `PENDING_REVIEW`. Sesi Mahasiswa 3 aktif di Profil Browser 2.
 - **Aktor:** Admin & Mahasiswa 3
 - **Langkah:**
-  1. Pada `/admin/verifications`, buka berkas Mahasiswa 3.
+  1. Pada Profil Browser 1 (`/admin/verifications`), Admin membuka berkas Mahasiswa 3 yang bertanda `PENDING_REVIEW`.
   2. Klik tombol "Minta Upload Ulang".
   3. Isi instruksi perbaikan: "Foto KTM buram, mohon foto ulang di tempat terang".
-  4. Submit instruksi.
-- **Expected Result:** Status Mahasiswa 3 berubah menjadi `RESUBMISSION_REQUIRED`; mahasiswa melihat instruksi perbaikan pada halaman statusnya.
-- **Evidence:** Screenshot modal resubmission dan tampilan instruksi perbaikan di sisi Mahasiswa 3.
+  4. Submit instruksi permintaan upload ulang.
+  5. Verifikasi bahwa status Mahasiswa 3 di database berubah menjadi `RESUBMISSION_REQUIRED` dan foto dokumen lama telah dibersihkan otomatis dari bucket privat.
+  6. Pada Profil Browser 2, Mahasiswa 3 mengakses/menyegarkan halaman `/register`. Sistem mendeteksi sesi mahasiswa dengan status `RESUBMISSION_REQUIRED`, lalu menampilkan kotak peringatan amber berisi instruksi perbaikan: *"Permintaan Perbaikan dari Admin TU: Foto KTM buram, mohon foto ulang di tempat terang"*.
+  7. Form registrasi secara otomatis mengarahkan Mahasiswa 3 langsung ke Tahap 2 (Foto Wajah) dan Tahap 3 (Foto Dokumen).
+  8. Mahasiswa 3 mengambil ulang foto wajah dan mengambil foto dokumen fisik kembali (diarahkan untuk pengujian penolakan pada langkah selanjutnya), lalu klik "Kirim Berkas Pendaftaran" (`POST /api/students/me/verification-photos`).
+- **Expected Result:** Permintaan resubmission Admin berhasil dicatat dengan audit log `STUDENT_VERIFICATION_RESUBMIT`; dokumen lama dihapus; mahasiswa melihat instruksi perbaikan di UI `/register` dan berhasil mengunggah ulang berkas; setelah unggah ulang dikirim, status mahasiswa bertransisi kembali menjadi `PENDING_REVIEW` dan masuk kembali ke antrean "Siap Diperiksa" Admin.
+- **Evidence:** Screenshot modal resubmission Admin, screenshot kotak peringatan amber instruksi resubmission pada sisi Mahasiswa 3 di `/register`, dan screenshot antrean Admin setelah berkas diunggah ulang (pastikan dokumen uji bebas dari PII pihak ketiga; informasi sensitif disamarkan).
 
 #### Langkah 3.3 — UAT-VER-02: Admin Rejection with Mandatory Reason
-- **Precondition:** Mahasiswa 3 telah menerima instruksi resubmission namun berkas tetap tidak valid.
+- **Precondition:** Mahasiswa 3 berstatus `PENDING_REVIEW` di antrean verifikasi Admin setelah menyelesaikan unggah ulang foto pada Langkah 3.2 (UAT-VER-03), namun berkas/data identitas tetap tidak memenuhi syarat. *(Catatan Status: Sebelum pengiriman ulang = `RESUBMISSION_REQUIRED`; Setelah pengiriman ulang = `PENDING_REVIEW`; Saat penolakan akhir = `REJECTED`). Mahasiswa yang masih berstatus `RESUBMISSION_REQUIRED` tidak boleh langsung menjalani penolakan akhir tanpa menyelesaikan proses re-upload terlebih dahulu.*
 - **Aktor:** Admin
 - **Langkah:**
-  1. Buka berkas Mahasiswa 3 di antrean verifikasi Admin.
+  1. Pada Profil Browser 1 (`/admin/verifications`), Admin membuka berkas Mahasiswa 3 yang telah berstatus `PENDING_REVIEW`.
   2. Klik tombol "Tolak Pendaftaran".
-  3. Coba submit tanpa mengisi alasan (verifikasi validasi wajib isi).
-  4. Isi alasan: "Data identitas tidak sesuai dokumen fisik", lalu submit.
-- **Expected Result:** Alasan penolakan wajib diisi; status Mahasiswa 3 berubah menjadi `REJECTED`; dokumen identitas dihapus permanen dari storage.
-- **Evidence:** Screenshot modal penolakan pendaftaran dan status akhir `REJECTED`.
+  3. Coba submit tanpa mengisi alasan penolakan (verifikasi validasi wajib isi `NOTES_REQUIRED` aktif).
+  4. Isi alasan resmi: "Data identitas tidak sesuai dokumen fisik", lalu submit konfirmasi penolakan.
+- **Expected Result:** Sistem memvalidasi alasan penolakan wajib diisi; status Mahasiswa 3 berubah secara permanen menjadi `REJECTED`; dokumen identitas di storage dihapus permanen seketika; audit log `STUDENT_VERIFICATION_REJECT` tercatat. Mahasiswa 3 tidak dapat mengakses QR Pass maupun meminjam proyektor.
+- **Evidence:** Screenshot peringatan validasi penolakan tanpa alasan, screenshot modal penolakan pendaftaran dengan alasan terisi, dan status akhir berkas `REJECTED`.
 
 #### Langkah 3.4 — UAT-CLM-01: Initial Leader Claim on Leaderless Class
 - **Precondition:** Mahasiswa 1 telah berstatus `ACTIVE` di `Kelas Uji A`. `Kelas Uji A` belum memiliki ketua kelas (`leader_student_id = null`).
@@ -327,7 +334,7 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   2. Amati progress bar hitungan mundur 60 detik.
   3. Tunggu hingga hitungan mundur mencapai 0 detik.
 - **Expected Result:** QR code diperbarui otomatis tanpa reload halaman; token JWT baru diterbitkan; payload tidak memuat NIM.
-- **Evidence:** Screenshot countdown bar bergerak dan token payload di DevTools.
+- **Evidence:** Screenshot countdown bar bergerak dan payload decoded token di DevTools (pastikan signature token mentah, header authorization, dan session cookie disamarkan/redacted).
 
 #### Langkah 5.2 — UAT-LOAN-03: Dual-Scan Borrowing via Kiosk & Face Verification
 - **Precondition:** Mahasiswa 2 ketua kelas aktif. Unit `TEST-PROJ-003` berstatus `AVAILABLE`.
@@ -337,7 +344,7 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   2. Pindai QR Pass Mahasiswa 2 yang aktif.
   3. Pindai stiker QR unit `TEST-PROJ-003` (`AVAILABLE`).
 - **Expected Result:** Kiosk memvalidasi kedua QR; menampilkan ringkasan data ketua kelas dan unit proyektor; foto wajah referensi dimuat via Signed URL 60 detik untuk verifikasi tatap muka petugas.
-- **Evidence:** Screenshot Kiosk menampilkan ringkasan data dan foto wajah referensi.
+- **Evidence:** Screenshot Kiosk menampilkan ringkasan data dan foto wajah referensi (pastikan token signed URL privat tidak dipublikasikan).
 
 #### Langkah 5.3 — UAT-LOAN-04: Handover Photo Capture & Transaction Creation
 - **Precondition:** Pemindaian ganda Langkah 5.2 telah berhasil divalidasi.
@@ -356,7 +363,7 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   1. Pada browser DevTools Network Tab, temukan request POST `/api/kiosk/transaction` dari Langkah 5.3.
   2. Lakukan "Replay XHR" pada request dengan kunci K1 tersebut.
 - **Expected Result:** Server merespons HTTP 200 dengan payload `idempotent_replay: true` dan mengembalikan `loan_id` yang sama persis tanpa membuat baris baru di tabel `loans`.
-- **Evidence:** Screenshot respons Network Tab menampilkan `idempotent_replay: true`.
+- **Evidence:** Screenshot respons Network Tab menampilkan `idempotent_replay: true` (pastikan token otentikasi, session cookie, dan authorization header pada request/response disamarkan).
 
 #### Langkah 5.5 — UAT-LOAN-05: Atomic Lock & Single Active Loan Enforcement
 - **Precondition:** Mahasiswa 2 memegang pinjaman aktif unit `TEST-PROJ-003`. Unit `TEST-PROJ-004` masih berstatus `AVAILABLE`.
@@ -448,22 +455,30 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
 ### FASE 7: ADMINISTRATIVE REPORTING & SEMESTER ROLL (3 Skenario)
 
 #### Langkah 7.1 — UAT-ADM-01: Semester Class Copy (copy-term)
-- **Precondition:** Halaman `/admin/classes` terbuka dengan sesi Admin aktif. Kelas semester ganjil (`Kelas Uji A`) telah aktif.
+- **Precondition:** Halaman `/admin/classes` terbuka dengan sesi Admin aktif. Kelas semester ganjil UAT (`Kelas Uji A`) telah aktif (`is_active = true`) pada semester terisolasi `2026/2027-UAT-GANJIL`.
 - **Aktor:** Admin
+- **Analisis Implementasi & Aturan Keselamatan Operasi:**
+  - *Perilaku Kode Backend (`/api/admin/classes/copy-term`):* Endpoint melakukan query terhadap **seluruh kelas aktif** pada semester sumber (`academic_term = source_term AND is_active = true`), lalu melakukan upsert ke semester target dengan menyetel `leader_student_id = null`, `leader_since = null`, dan `is_active = true`.
+  - *Larangan Penggunaan Semester Operasional:* **Dilarang keras** menggunakan semester operasional kampus (misalnya `2026/2027-GANJIL`) sebagai semester sumber, karena akan menduplikasi seluruh kelas operasional kampus ke semester target.
+  - *Pemeriksaan Pra-Uji Wajib:* Sebelum operasi dijalankan, pemeriksaan database read-only wajib memastikan bahwa semester sumber `2026/2027-UAT-GANJIL` **hanya memuat Kelas Uji A** dan semester target `2026/2027-UAT-GENAP` masih kosong dari kelas operasional. Jangan berasumsi risiko sudah nol hanya berdasarkan penamaan semester.
+  - *Kesesuaian Jumlah Kelas:* Jumlah kelas hasil penyalinan harus tepat 1 kelas (`classes_copied_count = 1`).
+  - *Stop Condition:* Apabila dialog konfirmasi menunjukkan `classes_copied_count > 1` atau terdapat kelas tak dikenal, pengujian **WAJIB DIHENTIKAN SEKETIKA**.
+  - *Mitigasi Risiko Data Operasional:* Kelas baru yang terbentuk pada semester target UAT (`2026/2027-UAT-GENAP`) wajib diisolasi dan dinonaktifkan (`is_active = false`) pada Fase 9 Protokol Cleanup pasca-UAT.
 - **Langkah:**
-  1. Buka `/admin/classes`.
+  1. Buka `/admin/classes` pada Profil Browser 1.
   2. Klik tombol "Salin Semester".
-  3. Masukkan semester sumber: `2026/2027-GANJIL`, semester target: `2026/2027-GENAP`.
-  4. Konfirmasi salin semester.
-- **Expected Result:** Seluruh rombel kelas semester ganjil tersalin ke semester genap dengan status ketua kosong (`leader_student_id = null`).
-- **Evidence:** Screenshot tabel kelas semester genap baru dengan ketua belum terisi.
+  3. Masukkan semester sumber: `2026/2027-UAT-GANJIL` dan semester target: `2026/2027-UAT-GENAP`.
+  4. Klik tombol konfirmasi salin semester.
+  5. Catat jumlah dan daftar kelas yang tersalin pada dialog konfirmasi respons JSON (`classes_copied_count`). Pastikan jumlahnya tepat 1 kelas.
+- **Expected Result:** Rombel kelas aktif semester ganjil UAT (`Kelas Uji A`) berhasil disalin ke semester target `2026/2027-UAT-GENAP` dengan jabatan ketua kelas kosong (`leader_student_id = null`); audit log `SETTINGS_UPDATED` tercatat dengan metadata `action: 'COPY_SEMESTER_CLASSES'`.
+- **Evidence:** Screenshot modal input salin semester, notifikasi sukses berisi jumlah kelas tersalin (`classes_copied_count = 1`), dan tabel kelas semester genap UAT baru dengan kolom ketua kelas kosong.
 
 #### Langkah 7.2 — UAT-CLM-07: New Academic Term Class Copy & Leadership Re-claim
-- **Precondition:** Skenario `UAT-ADM-01` (Langkah 7.1) telah selesai dieksekusi dan kelas semester genap telah terbentuk di database. Mahasiswa 2 adalah mahasiswa `ACTIVE`.
+- **Precondition:** Skenario `UAT-ADM-01` (Langkah 7.1) telah selesai dieksekusi dan kelas semester genap UAT (`2026/2027-UAT-GENAP`) telah terbentuk di database. Mahasiswa 2 adalah mahasiswa `ACTIVE`.
 - **Aktor:** Mahasiswa 2
 - **Langkah:**
   1. Mahasiswa 2 membuka menu klaim kelas semester baru pada `/my-qr`.
-  2. Pilih kelas semester genap hasil salinan dan submit klaim.
+  2. Pilih kelas semester genap UAT hasil salinan (`2026/2027-UAT-GENAP`) dan submit klaim.
 - **Expected Result:** Klaim terbuat tanpa meminta mahasiswa mengulang proses upload foto KTM/wajah.
 - **Evidence:** Screenshot form klaim semester baru tanpa step foto identitas.
 
@@ -499,7 +514,7 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   3. Coba submit tanpa mengisi alasan (verifikasi validasi wajib isi).
   4. Isi alasan: "Layar ponsel mahasiswa retak", submit sesi.
 - **Expected Result:** Sesi Kiosk manual terbentuk dengan `borrow_identification_method = 'MANUAL_LOOKUP'`; alasan tersimpan dalam audit log.
-- **Evidence:** Screenshot form manual lookup dan log pencatatan sesi manual.
+- **Evidence:** Screenshot form manual lookup dan log pencatatan sesi manual (pastikan tidak memuat PII mahasiswa di luar data pengujian; data sensitif wajib disamarkan).
 
 #### Langkah 8.3 — UAT-QR-01: Self-Revocation of Active Leader QR Token
 - **Precondition:** Screenshot QR Pass Mahasiswa 2 aktif saat ini disimpan sebelum tombol cabut ditekan.
@@ -509,7 +524,7 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   2. Pada `/my-qr`, klik tombol "Cabut QR Pass Ini" dan konfirmasi.
   3. Pindai tangkapan layar QR lama pada Kiosk.
 - **Expected Result:** Versi token akun naik (`qr_token_version + 1`); QR lama yang discan di Kiosk seketika ditolak dengan error `VERSION_MISMATCH`.
-- **Evidence:** Screenshot modal pencabutan mandiri sukses dan error penolakan token lama di Kiosk.
+- **Evidence:** Screenshot modal pencabutan mandiri sukses dan error penolakan token lama di Kiosk (token JWT mentah disamarkan).
 
 #### Langkah 8.4 — UAT-ADM-04: Role-Based Access Control (RBAC) Enforcement
 - **Precondition:** Sesi Mahasiswa aktif di Profil Browser 2; sesi Staf/Admin aktif di Profil Browser 1.
@@ -532,22 +547,27 @@ TOTAL SKENARIO UAT: TEPAT 37 SKENARIO DEFINITIF (TIDAK ADA DUPLIKASI)
   2. Verifikasi ketiadaan tombol edit dan delete (append-only proof).
   3. Uji filter pencarian dan buka modal inspeksi JSON.
 - **Expected Result:** Seluruh aktivitas pengujian Fase 1 s/d 8 tercatat kronologis dan tidak dapat dimanipulasi.
-- **Evidence:** Screenshot tabel audit logs lengkap dengan modal payload JSON terbuka.
+- **Evidence:** Screenshot tabel audit logs lengkap dengan modal payload JSON terbuka (pastikan informasi sensitif seperti token otentikasi, JWT, cookie, atau credential sistem pada payload disamarkan/redacted).
 
 ---
 
 ## 4. Analisis Status Proyektor & Kelas: Baseline vs UAT vs Post-UAT Cleanup
 
+> [!IMPORTANT]
+> **Batasan Verifikasi Basis Data & Deployment Cloud:**
+> - Angka 15 completed historical loans, 0 active loans, dan 140 audit logs merupakan **Catatan Baseline Historis Audit Stage 23.6**. Kondisi database staging live saat ini **belum diverifikasi** karena tidak ada query SELECT live yang dijalankan selama tahap persiapan demi mencegah mutasi tidak sengaja. Verifikasi database secara read-only wajib dilakukan tepat sebelum Fase 1 dimulai.
+> - Status deployment staging Vercel berstatus **NOT VERIFIED / PENDING** sampai Pemilik Sistem mengonfirmasi bahwa build aktif pada branch `staging` di Vercel Dashboard berasal dari commit `58ec98d`.
+
 Pembersihan lingkungan pengujian wajib mematuhi pemetaan status berikut untuk melindungi kondisi pemeliharaan yang sah dan menjaga integritas 15 transaksi historis kampus:
 
-| Aset Pengujian | Status Awal (Baseline DB) | Perubahan yang Terjadi Selama UAT | Status Akhir Saat UAT Selesai | Rekomendasi Pemulihan Pasca-UAT (Safe Cleanup) | Keterangan & Proteksi Status Sah |
+| Aset Pengujian | Status Awal (Catatan Baseline Historis Stage 23.6) | Perubahan yang Terjadi Selama UAT | Status Akhir Saat UAT Selesai | Rekomendasi Pemulihan Pasca-UAT (Safe Cleanup) | Keterangan & Proteksi Status Sah |
 | :--- | :---: | :--- | :---: | :--- | :--- |
 | **TEST-PROJ-001** | **MAINTENANCE** | Diuji pada `UAT-PRJ-05` (Kiosk menolak pinjaman). Status **tidak berubah**. | **MAINTENANCE** | **JANGAN DIUBAH (TETAP MAINTENANCE)** | **KONDISI SAH**: Merupakan proyektor yang memang sedang rusak sebelum UAT. Dilarang mereset unit ini ke AVAILABLE. |
 | **TEST-PROJ-002** | **AVAILABLE** | Tidak dimutasi selama pengujian 37 skenario (unit kontrol). | **AVAILABLE** | **TETAP AVAILABLE** | Tidak ada tindakan cleanup yang diperlukan. |
 | **TEST-PROJ-003** | **AVAILABLE** | Dipinjam & dikembalikan 3x. Terakhir dikembalikan dengan laporan kendala teknis port HDMI pada `UAT-RTN-03`. | **MAINTENANCE** | **UBAH KEMBALI KE AVAILABLE** | Pemulihan dilakukan oleh Admin TU via UI `/admin/projectors` dengan catatan: "Pemulihan status pasca-UAT kendala simulasi". |
 | **TEST-PROJ-004** | *Belum ada di DB* | Didaftarkan baru (`UAT-PRJ-01`) $\rightarrow$ `AVAILABLE`, diuji batas 1 unit (`UAT-LOAN-05`), lalu diubah manual ke `MAINTENANCE` (`UAT-PRJ-03`). | **MAINTENANCE** | **UBAH KE INACTIVE** | Nonaktifkan unit melalui UI Admin inventaris agar tidak muncul sebagai proyektor aktif operasional kampus. |
-| **Kelas Uji A** | *Belum ada di DB* | Dibuat pada Langkah 1.1 (`is_active = true`). Digunakan Mahasiswa 1 dan Mahasiswa 2. | **ACTIVE** | **NONAKTIFKAN (is_active = false)** | Dinonaktifkan via UI kelas setelah memastikan tidak ada pinjaman aktif. |
-| **Kelas Semester Genap** | *Belum ada di DB* | Dihasilkan dari salin semester (`UAT-ADM-01`). | **ACTIVE** | **SESUAI KEBIJAKAN OWNER** | Dapat dipertahankan untuk semester depan atau dinonaktifkan (`is_active = false`). |
+| **Kelas Uji A (2026/2027-UAT-GANJIL)** | *Belum ada di DB* | Dibuat pada Langkah 1.1 (`is_active = true`). Digunakan Mahasiswa 1 dan Mahasiswa 2. | **ACTIVE** | **NONAKTIFKAN (is_active = false)** | Dinonaktifkan via UI kelas setelah memastikan tidak ada pinjaman aktif. |
+| **Kelas Uji Semester Genap (2026/2027-UAT-GENAP)** | *Belum ada di DB* | Dihasilkan dari salin semester UAT (`UAT-ADM-01`). | **ACTIVE** | **NONAKTIFKAN (is_active = false)** | Dinonaktifkan via UI kelas pada protokol cleanup pasca-UAT agar tidak mengotori katalog akademik. |
 | **Akun Mahasiswa (M1, M2, M3)** | *Belum ada di DB* | Didaftarkan dan digunakan selama pengujian UAT. | **ACTIVE / REJECTED** | **DEAKTIVASI (INACTIVE)** | **DILARANG SQL DELETE**: Ubah status menjadi `INACTIVE` (`deactivated_at = NOW()`). Ini menjaga relasi `ON DELETE RESTRICT` pada tabel `loans`. |
 
 ---
