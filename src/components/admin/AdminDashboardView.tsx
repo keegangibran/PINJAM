@@ -726,6 +726,13 @@ export const AdminDashboardView: React.FC<AdminDashboardViewProps> = function Ad
                 <span className="truncate">Manajemen Kelas</span>
               </Link>
               <Link
+                href="/admin/classes?tab=claims"
+                className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
+              >
+                <Users size={14} className="text-slate-500 shrink-0" />
+                <span className="truncate">Klaim Ketua Kelas</span>
+              </Link>
+              <Link
                 href="/admin/projectors"
                 className="inline-flex items-center justify-center gap-1.5 px-3 py-2 sm:py-1.5 rounded-element border border-borderline bg-surface hover:bg-slate-50 text-main text-xs font-semibold shadow-sm transition-all active:scale-[0.99] min-h-[40px] sm:min-h-[36px]"
               >

@@ -1,7 +1,10 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams, useRouter } from 'next/navigation';
+import { GraduationCap, Users, Plus, Copy, ArrowLeft } from 'lucide-react';
+import LeaderClaimsInboxView from '@/components/admin/LeaderClaimsInboxView';
 
 interface ClassItem {
   id: string;
@@ -21,7 +24,13 @@ interface ClassItem {
   } | null;
 }
 
-export default function AdminClassesPage() {
+function AdminClassesContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const [activeTab, setActiveTab] = useState<'classes' | 'claims'>(tabParam === 'claims' ? 'claims' : 'classes');
+  const [pendingClaimsCount, setPendingClaimsCount] = useState<number>(0);
+
   const [classes, setClasses] = useState<ClassItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -44,6 +53,36 @@ export default function AdminClassesPage() {
   // Form State Salin Semester
   const [sourceTerm, setSourceTerm] = useState('');
   const [targetTerm, setTargetTerm] = useState('');
+
+  // Sync tab with URL
+  useEffect(() => {
+    if (tabParam === 'claims') {
+      setActiveTab('claims');
+    } else {
+      setActiveTab('classes');
+    }
+  }, [tabParam]);
+
+  // Fetch initial pending claims count for tab badge
+  useEffect(() => {
+    fetch('/api/admin/leader-claims?status=PENDING')
+      .then((res) => res.json())
+      .then((data) => {
+        if (data.summary && typeof data.summary.pending_count === 'number') {
+          setPendingClaimsCount(data.summary.pending_count);
+        }
+      })
+      .catch(() => {});
+  }, []);
+
+  const handleTabChange = (tab: 'classes' | 'claims') => {
+    setActiveTab(tab);
+    if (tab === 'claims') {
+      router.replace('/admin/classes?tab=claims');
+    } else {
+      router.replace('/admin/classes');
+    }
+  };
 
   const fetchClasses = async () => {
     setLoading(true);
@@ -185,138 +224,194 @@ export default function AdminClassesPage() {
               <span className="rounded-full bg-blue-100 px-2.5 py-0.5 text-xs font-semibold text-blue-700">
                 Admin Panel
               </span>
-              <h1 className="text-2xl font-bold text-slate-900">Manajemen Kelas & Semester</h1>
+              <h1 className="text-2xl font-bold text-slate-900">Manajemen Kelas & Ketua Kelas</h1>
             </div>
             <p className="text-sm text-slate-500 mt-1">
-              Pengelolaan daftar kelas baku kombinasi prodi, angkatan, rombel, dan penetapan ketua kelas.
+              Pengelolaan daftar kelas baku kombinasi prodi, angkatan, rombel, dan persetujuan klaim ketua kelas (FR-01D, FR-01F).
             </p>
           </div>
           <div className="flex items-center gap-3">
             <Link
               href="/admin"
-              className="px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50"
+              className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-medium text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition-all"
             >
-              ← Kembali ke Dashboard
+              <ArrowLeft size={14} />
+              Kembali ke Dashboard
             </Link>
-            <button
-              onClick={() => {
-                setSourceTerm(terms[0] || '2026/2027-GANJIL');
-                setShowCopyModal(true);
-              }}
-              className="px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50"
-            >
-              Salin ke Semester Baru
-            </button>
-            <button
-              onClick={() => setShowAddModal(true)}
-              className="px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700"
-            >
-              + Tambah Kelas Baku
-            </button>
+            {activeTab === 'classes' && (
+              <>
+                <button
+                  onClick={() => {
+                    setSourceTerm(terms[0] || '2026/2027-GANJIL');
+                    setShowCopyModal(true);
+                  }}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-slate-700 bg-white border border-slate-300 rounded-xl hover:bg-slate-50 shadow-sm transition-all"
+                >
+                  <Copy size={14} />
+                  Salin ke Semester Baru
+                </button>
+                <button
+                  onClick={() => setShowAddModal(true)}
+                  className="inline-flex items-center gap-1.5 px-4 py-2 text-xs font-semibold text-white bg-blue-600 rounded-xl hover:bg-blue-700 shadow-sm transition-all"
+                >
+                  <Plus size={14} />
+                  Tambah Kelas Baku
+                </button>
+              </>
+            )}
           </div>
         </div>
 
-        {/* Filter Bar */}
-        <div className="mt-6 flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            placeholder="Cari prodi, rombel, angkatan, atau nama/NIM ketua..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            className="flex-1 rounded-xl border border-slate-300 px-4 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
-          />
-          <select
-            value={selectedTerm}
-            onChange={(e) => setSelectedTerm(e.target.value)}
-            className="rounded-xl border border-slate-300 px-4 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+        {/* Navigation Tabs */}
+        <div className="mt-6 border-b border-slate-200 flex gap-4">
+          <button
+            onClick={() => handleTabChange('classes')}
+            className={`inline-flex items-center gap-2 pb-3 px-2 text-sm font-semibold border-b-2 transition-all ${
+              activeTab === 'classes'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
           >
-            <option value="ALL">Semua Semester ({classes.length} kelas)</option>
-            {terms.map((t) => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+            <GraduationCap size={16} />
+            <span>Daftar Kelas Baku</span>
+            <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+              {classes.length}
+            </span>
+          </button>
+          <button
+            onClick={() => handleTabChange('claims')}
+            className={`inline-flex items-center gap-2 pb-3 px-2 text-sm font-semibold border-b-2 transition-all ${
+              activeTab === 'claims'
+                ? 'border-blue-600 text-blue-600'
+                : 'border-transparent text-slate-500 hover:text-slate-800'
+            }`}
+          >
+            <Users size={16} />
+            <span>Antrean Klaim Ketua Kelas</span>
+            {pendingClaimsCount > 0 ? (
+              <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-amber-500 text-white font-bold animate-pulse">
+                {pendingClaimsCount}
+              </span>
+            ) : (
+              <span className="ml-1 text-xs px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
+                0
+              </span>
+            )}
+          </button>
         </div>
 
-        {/* Content Table */}
-        <div className="mt-6 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
-          {loading ? (
-            <div className="p-12 text-center text-sm text-slate-500">Memuat data kelas baku...</div>
-          ) : error ? (
-            <div className="p-8 text-center text-sm text-red-600">{error}</div>
-          ) : filteredClasses.length === 0 ? (
-            <div className="p-12 text-center text-sm text-slate-500">
-              Tidak ada data kelas yang cocok dengan pencarian.
+        {/* Active Tab View */}
+        {activeTab === 'claims' ? (
+          <div className="mt-6">
+            <LeaderClaimsInboxView
+              onPendingCountChange={(cnt) => setPendingClaimsCount(cnt)}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Filter Bar */}
+            <div className="mt-6 flex flex-col sm:flex-row gap-3">
+              <input
+                type="text"
+                placeholder="Cari prodi, rombel, angkatan, atau nama/NIM ketua..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="flex-1 rounded-xl border border-slate-300 px-4 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              />
+              <select
+                value={selectedTerm}
+                onChange={(e) => setSelectedTerm(e.target.value)}
+                className="rounded-xl border border-slate-300 px-4 py-2 text-sm bg-white focus:outline-none focus:ring-1 focus:ring-blue-500"
+              >
+                <option value="ALL">Semua Semester ({classes.length} kelas)</option>
+                {terms.map((t) => (
+                  <option key={t} value={t}>
+                    {t}
+                  </option>
+                ))}
+              </select>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-left text-xs border-collapse">
-                <thead>
-                  <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-semibold">
-                    <th className="py-3 px-4">Program Studi</th>
-                    <th className="py-3 px-4">Angkatan</th>
-                    <th className="py-3 px-4">Rombel</th>
-                    <th className="py-3 px-4">Semester</th>
-                    <th className="py-3 px-4">Ketua Kelas Aktif</th>
-                    <th className="py-3 px-4">Status</th>
-                    <th className="py-3 px-4 text-right">Aksi</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-100">
-                  {filteredClasses.map((cls) => (
-                    <tr key={cls.id} className="hover:bg-slate-50/80">
-                      <td className="py-3 px-4 font-semibold text-slate-900">{cls.study_program}</td>
-                      <td className="py-3 px-4 text-slate-600">{cls.cohort_year}</td>
-                      <td className="py-3 px-4 font-bold text-blue-600">{cls.section}</td>
-                      <td className="py-3 px-4 text-slate-600">{cls.academic_term}</td>
-                      <td className="py-3 px-4">
-                        {cls.leader ? (
-                          <div>
-                            <p className="font-semibold text-slate-900">{cls.leader.name}</p>
-                            <p className="text-slate-500 font-mono text-[11px]">{cls.leader.nim}</p>
-                          </div>
-                        ) : (
-                          <span className="text-slate-400 italic">Belum ada ketua</span>
-                        )}
-                      </td>
-                      <td className="py-3 px-4">
-                        <span
-                          className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
-                            cls.is_active
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : 'bg-slate-100 text-slate-600'
-                          }`}
-                        >
-                          {cls.is_active ? 'Aktif' : 'Nonaktif'}
-                        </span>
-                      </td>
-                      <td className="py-3 px-4 text-right space-x-2">
-                        {cls.leader && (
-                          <button
-                            onClick={() => {
-                              setReleaseModalClass(cls);
-                              setReleaseReason('');
-                            }}
-                            className="text-amber-600 hover:text-amber-700 font-medium text-[11px]"
-                          >
-                            Lepas Ketua
-                          </button>
-                        )}
-                        <button
-                          onClick={() => handleToggleActive(cls)}
-                          className="text-slate-600 hover:text-slate-900 font-medium text-[11px]"
-                        >
-                          {cls.is_active ? 'Nonaktifkan' : 'Aktifkan'}
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+
+            {/* Content Table */}
+            <div className="mt-6 rounded-2xl border border-slate-200 bg-white overflow-hidden shadow-sm">
+              {loading ? (
+                <div className="p-12 text-center text-sm text-slate-500">Memuat data kelas baku...</div>
+              ) : error ? (
+                <div className="p-8 text-center text-sm text-red-600">{error}</div>
+              ) : filteredClasses.length === 0 ? (
+                <div className="p-12 text-center text-sm text-slate-500">
+                  Tidak ada data kelas yang cocok dengan pencarian.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 uppercase tracking-wider font-semibold">
+                        <th className="py-3 px-4">Program Studi</th>
+                        <th className="py-3 px-4">Angkatan</th>
+                        <th className="py-3 px-4">Rombel</th>
+                        <th className="py-3 px-4">Semester</th>
+                        <th className="py-3 px-4">Ketua Kelas Aktif</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Aksi</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {filteredClasses.map((cls) => (
+                        <tr key={cls.id} className="hover:bg-slate-50/80">
+                          <td className="py-3 px-4 font-semibold text-slate-900">{cls.study_program}</td>
+                          <td className="py-3 px-4 text-slate-600">{cls.cohort_year}</td>
+                          <td className="py-3 px-4 font-bold text-blue-600">{cls.section}</td>
+                          <td className="py-3 px-4 text-slate-600">{cls.academic_term}</td>
+                          <td className="py-3 px-4">
+                            {cls.leader ? (
+                              <div>
+                                <p className="font-semibold text-slate-900">{cls.leader.name}</p>
+                                <p className="text-slate-500 font-mono text-[11px]">{cls.leader.nim}</p>
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic">Belum ada ketua</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`inline-block px-2 py-0.5 rounded-full text-[11px] font-semibold ${
+                                cls.is_active
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-slate-100 text-slate-600'
+                              }`}
+                            >
+                              {cls.is_active ? 'Aktif' : 'Nonaktif'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-2">
+                            {cls.leader && (
+                              <button
+                                onClick={() => {
+                                  setReleaseModalClass(cls);
+                                  setReleaseReason('');
+                                }}
+                                className="text-amber-600 hover:text-amber-700 font-medium text-[11px]"
+                              >
+                                Lepas Ketua
+                              </button>
+                            )}
+                            <button
+                              onClick={() => handleToggleActive(cls)}
+                              className="text-slate-600 hover:text-slate-900 font-medium text-[11px]"
+                            >
+                              {cls.is_active ? 'Nonaktifkan' : 'Aktifkan'}
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
-          )}
-        </div>
+          </>
+        )}
       </div>
 
       {/* Modal Tambah Kelas */}
@@ -504,5 +599,19 @@ export default function AdminClassesPage() {
         </div>
       )}
     </div>
+  );
+}
+
+export default function AdminClassesPage() {
+  return (
+    <Suspense
+      fallback={
+        <div className="min-h-screen p-8 text-center text-sm text-slate-500 bg-slate-50">
+          Memuat antarmuka manajemen kelas...
+        </div>
+      }
+    >
+      <AdminClassesContent />
+    </Suspense>
   );
 }
