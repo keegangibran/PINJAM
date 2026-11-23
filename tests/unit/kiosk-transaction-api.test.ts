@@ -420,4 +420,192 @@ describe('Kiosk Transaction API Unit Tests (FR-06, FR-07, NFR-02, NFR-06)', () =
       })
     );
   });
+
+  it('rejects idempotency key reuse with different student with 409 IDEMPOTENCY_CONFLICT', async () => {
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    // 1. Mock existing loan owned by student-A
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'loan-prev-1',
+          status: 'ACTIVE',
+          student_id: 'student-A',
+          projector_id: 'proj-1',
+          projectors: { code: 'PROJ-001' },
+        },
+      }),
+    }));
+
+    // 2. Mock kiosk_session lookup belonging to student-B
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({
+        data: {
+          student_id: 'student-B',
+        },
+      }),
+    }));
+
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'idem-key-student-hijack-12345',
+        projector_code: 'PROJ-001',
+        kiosk_session_id: '00000000-0000-0000-0000-000000000002',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+      }),
+    });
+
+    const res = await processTransaction(req);
+    const data = await res.json();
+    expect(res.status).toBe(409);
+    expect(data.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(data.error.message).toContain('mahasiswa yang berbeda');
+  });
+
+  it('rejects borrow idempotency key reuse on return attempt with 409 IDEMPOTENCY_CONFLICT', async () => {
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    // Mock existing loan that was an ACTIVE borrow
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'loan-prev-1',
+          status: 'ACTIVE',
+          student_id: 'student-A',
+          projector_id: 'proj-1',
+          projectors: { code: 'PROJ-001' },
+        },
+      }),
+    }));
+
+    // Request is an attempted return with the borrow key
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'idem-key-borrow-reused-on-return',
+        projector_code: 'PROJ-001',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+        returner: { type: 'BORROWER' },
+      }),
+    });
+
+    const res = await processTransaction(req);
+    const data = await res.json();
+    expect(res.status).toBe(409);
+    expect(data.error.code).toBe('IDEMPOTENCY_CONFLICT');
+    expect(data.error.message).toContain('tidak dapat digunakan untuk pengembalian');
+  });
+
+  it('maps PL/pgSQL business exceptions to proper HTTP status codes (PINJAMAN_AKTIF_SUDAH_ADA -> 409)', async () => {
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    // 1. Idempotency: not found in loans
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({ data: null }),
+    }));
+
+    // 2. Projector: AVAILABLE
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: { id: 'proj-1', code: 'PROJ-001', status: 'AVAILABLE' },
+      }),
+    }));
+
+    // 3. RPC throws PINJAMAN_AKTIF_SUDAH_ADA
+    mockAdminRpc.mockResolvedValueOnce({
+      data: null,
+      error: { message: 'PINJAMAN_AKTIF_SUDAH_ADA: Ketua kelas masih memiliki transaksi peminjaman aktif lain.' },
+    });
+
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'idem-key-active-limit',
+        projector_code: 'PROJ-001',
+        kiosk_session_id: '00000000-0000-0000-0000-000000000001',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+      }),
+    });
+
+    const res = await processTransaction(req);
+    const data = await res.json();
+    expect(res.status).toBe(409);
+    expect(data.error.code).toBe('ACTIVE_LOAN_EXISTS');
+  });
+
+  it('recovers gracefully from concurrent unique constraint violation by returning idempotent replay', async () => {
+    const validBase64 = 'data:image/jpeg;base64,/9j/4AAQSkZJRgABAQEASABIAAD/2wBDAP//////////////////////////////////////////////////////////////////////////////////////wgALCAABAAEBAREA/8QAFBABAAAAAAAAAAAAAAAAAAAAAP/aAAgBAQABPxA=';
+
+    // 1. Idempotency pre-check: not found in loans (concurrent race)
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({ data: null }),
+    }));
+
+    // 2. Projector: AVAILABLE
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      single: vi.fn().mockResolvedValueOnce({
+        data: { id: 'proj-1', code: 'PROJ-001', status: 'AVAILABLE' },
+      }),
+    }));
+
+    // 3. RPC throws unique violation (code 23505)
+    mockAdminRpc.mockResolvedValueOnce({
+      data: null,
+      error: { code: '23505', message: 'duplicate key value violates unique constraint "loans_idempotency_key_key"' },
+    });
+
+    // 4. Recovery lookup finds the loan committed by the concurrent request
+    mockAdminFrom.mockImplementationOnce(() => ({
+      select: vi.fn().mockReturnThis(),
+      eq: vi.fn().mockReturnThis(),
+      maybeSingle: vi.fn().mockResolvedValueOnce({
+        data: {
+          id: 'loan-concurrent-1',
+          status: 'ACTIVE',
+          projector_id: 'proj-1',
+          projectors: { code: 'PROJ-001' },
+        },
+      }),
+    }));
+
+    const req = new Request('http://localhost/api/kiosk/transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        idempotency_key: 'idem-key-concurrent-race',
+        projector_code: 'PROJ-001',
+        kiosk_session_id: '00000000-0000-0000-0000-000000000001',
+        photo_base64: validBase64,
+        condition: 'NORMAL',
+      }),
+    });
+
+    const res = await processTransaction(req);
+    const json = await res.json();
+    expect(res.status).toBe(200);
+    expect(json.success).toBe(true);
+    expect(json.idempotent_replay).toBe(true);
+    expect(json.data.loan_id).toBe('loan-concurrent-1');
+  });
 });

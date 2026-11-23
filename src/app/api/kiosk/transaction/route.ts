@@ -80,7 +80,7 @@ export async function POST(request: Request) {
     // 2. Pemeriksaan Idempotensi: Cegah Replay dengan Parameter Berbeda
     const { data: existingLoan } = await adminClient
       .from('loans')
-      .select('id, status, projector_id, return_condition, projectors:projector_id(code)')
+      .select('id, status, student_id, projector_id, return_condition, projectors:projector_id(code)')
       .eq('idempotency_key', idempotency_key)
       .maybeSingle();
 
@@ -93,6 +93,40 @@ export async function POST(request: Request) {
             error: {
               code: 'IDEMPOTENCY_CONFLICT',
               message: 'Idempotency key telah digunakan sebelumnya untuk unit proyektor yang berbeda.',
+            },
+          },
+          { status: 409 }
+        );
+      }
+
+      // Validasi isolasi mahasiswa: jika kiosk_session_id disertakan, pastikan student_id cocok
+      if (kiosk_session_id) {
+        const { data: session } = await adminClient
+          .from('kiosk_sessions')
+          .select('student_id')
+          .eq('id', kiosk_session_id)
+          .maybeSingle();
+
+        if (session && session.student_id && existingLoan.student_id && session.student_id !== existingLoan.student_id) {
+          return NextResponse.json(
+            {
+              error: {
+                code: 'IDEMPOTENCY_CONFLICT',
+                message: 'Idempotency key telah digunakan sebelumnya untuk mahasiswa yang berbeda.',
+              },
+            },
+            { status: 409 }
+          );
+        }
+      }
+
+      // Validasi konsistensi aksi (Borrow vs Return)
+      if (existingLoan.status === 'ACTIVE' && returner) {
+        return NextResponse.json(
+          {
+            error: {
+              code: 'IDEMPOTENCY_CONFLICT',
+              message: 'Idempotency key telah digunakan sebelumnya untuk transaksi peminjaman, tidak dapat digunakan untuk pengembalian.',
             },
           },
           { status: 409 }
@@ -206,9 +240,56 @@ export async function POST(request: Request) {
     });
 
     if (rpcError) {
+      // Penanganan perlombaan konkurensi: jika error adalah pelanggaran unik idempotency_key
+      if (rpcError.message?.includes('loans_idempotency_key_key') || (rpcError as any).code === '23505') {
+        const { data: concurrentLoan } = await adminClient
+          .from('loans')
+          .select('id, status, projector_id, return_condition, projectors:projector_id(code)')
+          .eq('idempotency_key', idempotency_key)
+          .maybeSingle();
+
+        if (concurrentLoan) {
+          return NextResponse.json({
+            success: true,
+            idempotent_replay: true,
+            data: {
+              action: concurrentLoan.status === 'ACTIVE' ? 'BORROW' : 'RETURN',
+              loan_id: concurrentLoan.id,
+              projector_code: normalizedCode,
+              status: concurrentLoan.status,
+              message: 'Transaksi telah diproses sebelumnya (idempotency key cocok).',
+            },
+          });
+        }
+      }
+
+      // Pemetaan kode status HTTP berbasis pesan bisnis dari PL/pgSQL
+      let errorStatus = 500;
+      let errorCode = 'TRANSACTION_FAILED';
+      const msg = rpcError.message || '';
+
+      if (msg.includes('PINJAMAN_AKTIF_SUDAH_ADA')) {
+        errorStatus = 409;
+        errorCode = 'ACTIVE_LOAN_EXISTS';
+      } else if (msg.includes('AKSES_DITOLAK') || msg.includes('BUKAN_KETUA') || msg.includes('MAHASISWA_TIDAK_AKTIF')) {
+        errorStatus = 403;
+        errorCode = 'FORBIDDEN';
+      } else if (msg.includes('TIDAK_DITEMUKAN')) {
+        errorStatus = 404;
+        errorCode = 'NOT_FOUND';
+      } else if (
+        msg.includes('KEDALUWARSA') ||
+        msg.includes('STATUS_UNIT_TIDAK_VALID') ||
+        msg.includes('SUDAH_DIGUNAKAN') ||
+        msg.includes('SESI_KIOSK_DIBUTUHKAN')
+      ) {
+        errorStatus = 400;
+        errorCode = 'BAD_REQUEST';
+      }
+
       return NextResponse.json(
-        { error: { code: 'TRANSACTION_FAILED', message: rpcError.message } },
-        { status: 500 }
+        { error: { code: errorCode, message: rpcError.message } },
+        { status: errorStatus }
       );
     }
 
