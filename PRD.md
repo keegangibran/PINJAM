@@ -1,694 +1,522 @@
-# PRD — SmartProjex (Sistem Peminjaman Proyektor Pintar Berbasis Dual-Scan)
+# Product Requirements Document (PRD) — PINJAM (SmartProjex)
+## Versi 1.0.0 (Release Baseline)
 
-> Dokumen ini adalah **sumber kebenaran** project. Kode mengikuti PRD. Jika kebutuhan berubah, ubah PRD dulu, baru kodenya.
-
----
-
-## 0. Ringkasan
-
-- **Produk**: Aplikasi web peminjaman proyektor kampus berbasis pemindaian ganda (QR Pass Ketua Kelas + QR Proyektor), verifikasi tatap muka oleh petugas TU, klaim ketua kelas per kelas, dokumentasi foto transaksi, konfirmasi kondisi sederhana, dan pemantauan batas waktu pengembalian.
-- **Untuk siapa**: Ketua Kelas (peminjam utama) dan Petugas Tata Usaha (TU)/Laboratorium Kampus.
-- **Masalah yang diselesaikan**: Menggantikan pencatatan buku besar manual dan penitipan KTP fisik dengan pencatatan transaksi digital, verifikasi awal ketua kelas, pelacakan unit secara real-time, pelacakan keterlambatan, dan bukti dokumentasi.
-- **Stack utama**: Next.js 15 (App Router), Tailwind CSS, Supabase (PostgreSQL, Auth, Storage), `html5-qrcode`.
-- **Status project**: Perencanaan (Siap dieksekusi di Google Antigravity)
-- **Terakhir diperbarui**: 5 November 2026 (Revisi 3)
+> **Dokumen Sumber Kebenaran (*Single Source of Truth*)**:  
+> Dokumen ini memuat spesifikasi persyaratan produk, arsitektur sistem, aturan bisnis, skema basis data, dan kriteria penerimaan resmi untuk aplikasi **PINJAM (SmartProjex)** versi **v1.0.0**. Seluruh implementasi kode sumber pada branch `main` (commit `c5449e2`) dan tag `v1.0.0` mengacu secara otoritatif pada dokumen ini.
 
 ---
 
-## 1. Overview
+## BAB I — PENDAHULUAN
 
 ### 1.1 Latar Belakang
-Saat ini, proses peminjaman proyektor di kampus mengharuskan ketua kelas mengantre untuk menulis data dan tanda tangan di buku besar, serta menyerahkan KTP fisik sebagai jaminan. Metode ini menimbulkan antrean, risiko data tidak terbaca, risiko KTP tertukar/hilang, dan kesulitan melacak ketersediaan setiap unit. SmartProjex mengganti pencatatan tersebut dengan pemindaian QR melalui webcam laptop, pencatatan waktu otomatis, dan dokumentasi foto.
+Pada lingkungan perguruan tinggi (khususnya Fakultas Matematika dan Ilmu Pengetahuan Alam, Universitas Negeri Medan / FMIPA UNIMED), perkuliahan tatap muka sangat bergantung pada penggunaan perangkat proyektor LCD bergerak (*portable projectors*). Selama ini, operasional peminjaman dan pengembalian unit proyektor dilakukan secara konvensional di meja loket Tata Usaha (TU). Ketua kelas atau perwakilan kelas harus hadir secara fisik, mengantre, mengisi buku besar peminjaman berbahan kertas, membubuhkan tanda tangan manual, dan menyerahkan Kartu Tanda Penduduk (KTP) asli sebagai jaminan fisik (*collateral*).
 
-Aturan yang berlaku saat ini adalah **hanya ketua kelas yang mengambil proyektor**, dan SmartProjex mempertahankan aturan itu. Karena UNIMED belum menerbitkan KTM untuk setiap mahasiswa, **KTP dan KTM diterima setara** sebagai dokumen verifikasi saat registrasi. Petugas tidak perlu mengelola daftar ketua kelas: ketua kelas ditentukan melalui klaim pendaftar pertama pada tiap kelas, yang tetap harus disetujui petugas.
+Metode manual ini menimbulkan serangkaian permasalahan struktural:
+1. **Antrean Panjang di Jam Sibuk**: Terjadi penumpukan mahasiswa di meja loket TU 15–30 menit sebelum jadwal perkuliahan dimulai, yang sering kali menunda dimulainya perkuliahan.
+2. **Risiko Kehilangan dan Kerusakan Dokumen Fisik**: Penitipan kartu identitas asli (KTP/KTM) berisiko tinggi terhadap tertukarnya identitas, tercecer, atau hilang di meja loket.
+3. **Ketidakakuratan Pencatatan dan Visibilitas Inventaris yang Rendah**: Buku besar kertas rentan terhadap tulisan tangan yang sulit dibaca, catatan jam pinjam yang tidak presisi, dan ketiadaan visibilitas status unit secara *real-time* (apakah proyektor sedang tersedia, dipinjam, atau dalam perbaikan).
+4. **Ketiadaan Bukti Kondisi Fisik Transaksional**: Ketika terjadi kerusakan komponen proyektor (seperti port HDMI/VGA longgar, kabel putus, atau lensa buram), staf TU kesulitan menelusuri penanggung jawab karena serah terima sebelumnya tidak disertai bukti dokumentasi visual yang objektif.
 
-Karena KTP tidak lagi ditahan sebagai jaminan, sistem menambahkan **batas waktu pengembalian dan pelacakan keterlambatan** sebagai pengganti fungsi pengikat tersebut. Untuk menjaga transaksi tetap cepat, pemeriksaan fisik terperinci tidak dilakukan pada setiap transaksi; pemeriksaan petugas dilakukan ketika ada laporan kendala atau indikasi kerusakan. Pengembang tidak memiliki akses ke API database pusat kampus (SIAKAD), sehingga sistem dirancang mandiri.
+Aplikasi **PINJAM (SmartProjex)** dikembangkan untuk mentransformasi total tata kelola peminjaman proyektor kampus menjadi ekosistem digital berbasis web yang cepat, nir-sentuh KTP fisik (*zero physical collateral*), aman, dan terverifikasi melalui teknologi *dual-scan* (QR Pass mahasiswa dan QR aset unit), dokumentasi foto kamera langsung, konfirmasi kondisi satu langkah, serta transaksi atomik database.
 
-### 1.2 Tujuan
-- **T-01**: Memangkas waktu transaksi peminjaman dan pengembalian secara signifikan; target awal maksimal 15 detik untuk transaksi normal setelah alur diuji.
-- **T-02**: Menghilangkan pencatatan buku tulis manual dan penitipan KTP fisik melalui pencatatan digital dan dokumentasi foto transaksi.
-- **T-03**: Menyediakan informasi ketersediaan setiap unit proyektor secara *real-time* berdasarkan status unit.
-- **T-04**: Menyediakan jejak transaksi yang dapat ditelusuri jika ketua kelas melaporkan kendala atau petugas menemukan kerusakan.
-- **T-05**: Menyediakan batas waktu pengembalian dan daftar unit yang belum kembali sebagai pengganti fungsi jaminan KTP fisik.
-- **T-06**: Menegakkan aturan "hanya ketua kelas aktif yang dapat meminjam" tanpa petugas mengelola daftar nama ketua kelas.
+### 1.2 Identifikasi Masalah
+Berdasarkan observasi lapangan dan wawancara dengan staf loket TU dan perwakilan mahasiswa, masalah utama dirumuskan sebagai berikut:
+1. Waktu pencatatan transaksi manual memakan durasi 2 hingga 3 menit per peminjaman, menciptakan kemacetan layanan.
+2. Belum ada mekanisme pengikatan identitas digital yang aman sebagai pengganti penitipan kartu fisik KTP.
+3. Ketiadaan basis data mahasiswa terpusat yang dapat diakses langsung oleh pengembang lokal (ketiadaan akses API SIAKAD/PDDikti).
+4. Status penerbitan Kartu Tanda Mahasiswa (KTM) yang belum merata bagi seluruh angkatan mahasiswa UNIMED.
+5. Rentannya pencatatan transaksi terhadap manipulasi waktu pengembalian (*timestamp fraud*) dan klaim palsu ketua kelas.
 
-### 1.3 Target User (Persona)
-| Peran | Deskripsi | Kebutuhan utama | Kendala saat ini |
-|-------|-----------|-----------------|------------------|
-| **Ketua Kelas (Peminjam)** | Perwakilan kelas yang mengambil proyektor sebelum kelas dimulai. | Meminjam dan mengembalikan proyektor secepat mungkin tanpa meninggalkan KTP. | Antre menulis di buku besar, takut KTP hilang/tertukar. |
-| **Petugas TU / Admin** | Staf ruang perlengkapan yang menjaga dan menyerahkan unit proyektor. | Mengetahui siapa yang membawa proyektor tertentu, sampai kapan, dan memastikan unit kembali utuh. | Repot mengecek buku manual dan mencari KTP saat pengembalian; tidak tahu unit mana yang terlambat kembali. |
+### 1.3 Rumusan Masalah
+Bagaimana merancang dan membangun sistem informasi peminjaman dan pengelolaan inventaris proyektor berbasis web responsif yang:
+1. Mampu memvalidasi kelayakan peminjam (ketua kelas aktif) secara mandiri dan aman tanpa integrasi API eksternal?
+2. Mampu mengeksekusi transaksi serah terima peminjaman dan pengembalian dalam waktu singkat (target ≤ 15 detik) menggunakan *dual-scan* QR dan kamera tunggal laptop meja loket?
+3. Mampu menggantikan fungsi jaminan KTP fisik dengan pelacakan batas waktu pengembalian otomatis (*due_at*) dan dokumentasi foto kondisi fisik unit?
+4. Mampu menjamin integritas transaksi tinggi (maksimal 1 pinjaman aktif per proyektor dan per mahasiswa) tanpa celah *race condition* atau pengiriman ganda?
 
-### 1.4 Success Metrics
-| Metrik | Kondisi sekarang | Target |
-|--------|------------------|--------|
-| Durasi per transaksi pinjam/kembali | Estimasi 120 - 180 detik (tulis manual); ukur ulang dengan stopwatch pada 10 transaksi sebelum pilot | Target awal ≤ 15 detik untuk transaksi normal, diukur saat pilot |
-| Transaksi tanpa penitipan KTP fisik | 0% (semua menitipkan KTP) | 100% transaksi tanpa jaminan kartu fisik |
-| Kelengkapan data peminjam & waktu | Bergantung pada pencatatan manual | Data akun + timestamp server + foto dokumentasi pada 100% transaksi |
-| Transaksi yang butuh intervensi manual petugas (QR gagal baca, pencarian manual, foto ulang) | Tidak diukur | Dicatat selama pilot; target awal ≤ 10% |
-| Unit melewati batas waktu tanpa kembali | Tidak terlacak | Terlihat di dashboard secara real-time; jumlahnya dievaluasi saat pilot |
+### 1.4 Tujuan Pengembangan
+1. **T-01**: Memangkas waktu operasional serah terima proyektor dari 120–180 detik menjadi rata-rata ≤ 15 detik untuk transaksi normal.
+2. **T-02**: Menghilangkan 100% praktik penitipan kartu identitas fisik (KTP/KTM) di meja loket TU.
+3. **T-03**: Menyediakan pemantauan ketersediaan unit inventaris proyektor dan pelacakan keterlambatan secara *real-time*.
+4. **T-04**: Merekam jejak audit digital dan dokumentasi foto setiap serah terima unit proyektor.
+5. **T-05**: Menegakkan aturan otorisasi bahwa peminjam utama adalah ketua kelas aktif yang terverifikasi pada semester berjalan.
 
----
+### 1.5 Manfaat Sistem
+- **Bagi Mahasiswa (Ketua Kelas)**: Memperoleh kepastian layanan cepat, tidak perlu menyerahkan KTP fisik, dan memiliki QR Pass digital dinamis yang aman dari pemalsuan screenshot.
+- **Bagi Petugas Tata Usaha (TU)**: Menghilangkan beban penulisan buku besar manual, mempermudah pelacakan aset unit yang sedang dibawa atau terlambat, dan memiliki bukti foto dokumentasi visual yang objektif jika terjadi komplain kendala unit.
+- **Bagi Pimpinan Fakultas / Jurusan**: Memperoleh transparansi data utilisasi aset perkuliahan, riwayat kerusakan unit, dan laporan audit log operasional yang dapat diekspor secara berkala.
 
-## 2. Scope
+### 1.6 Ruang Lingkup
+Ruang lingkup sistem PINJAM versi v1.0.0 meliputi:
+- Pendaftaran mandiri mahasiswa dan pemilihan rombel dari daftar kelas baku.
+- Verifikasi foto wajah mandiri dengan panduan deteksi visual (*framing guide*) dan pemotretan dokumen KTM/KTP via kamera perangkat.
+- Pemeriksaan administratif manual oleh staf TU (pencocokan visual wajah, nama, dan kelayakan ketua kelas) dengan penghapusan instan foto dokumen pascakeputusan.
+- Penerbitan QR Pass dinamis berbasis token bertanda tangan kriptografis (HS256) berumur 60 detik.
+- Halaman loket meja layanan (*Dual-Scan Kiosk*) mandiri dengan dukungan mode layar penuh (Fullscreen API) dan monitor kedua.
+- Pemrosesan transaksi cerdas (*Smart Toggle*) yang menentukan aksi peminjaman atau pengembalian secara otomatis dari status unit proyektor di sisi server.
+- Pengambilan foto dokumentasi serah terima transaksi dan konfirmasi kondisi satu langkah ("Normal" vs "Laporkan Kendala").
+- Jalur cadangan (*fallback*) pencarian manual identitas peminjam jika perangkat mahasiswa bermasalah.
+- Panel Dashboard Admin untuk buku besar digital, pelacakan keterlambatan, manajemen status unit inventaris, pengelolaan rombel kelas/semester, manajemen akun staf, dan ekspor riwayat transaksi ke CSV.
+- Mekanisme tugas terjadwal (*scheduled retention cron*) untuk menjaga kepatuhan privasi data dan pembersihan otomatis foto kedaluwarsa.
 
-### 2.1 In Scope (Fase 1 / MVP)
-- Registrasi mandiri ketua kelas dengan verifikasi email, memilih kelas dari daftar baku, lalu verifikasi tatap muka di meja TU: petugas mengambil foto wajah referensi dan foto dokumen identitas (**KTM atau KTP, setara**) melalui kamera perangkat petugas, mencocokkan wajah, nama, dan status, lalu menyetujui atau menolak.
-- **Klaim ketua kelas**: pendaftar pertama pada kelas yang belum punya ketua menjadi calon ketua dan disetujui petugas; kelas yang sudah punya ketua memerlukan persetujuan petugas untuk penggantian; ketua dapat mengalihkan jabatan ke mahasiswa lain yang sudah terverifikasi di kelas yang sama; status ketua kedaluwarsa tiap semester.
-- Pembuatan **QR Pass Ketua Kelas** di layar HP berupa token bertanda tangan berumur singkat (60 detik, diperbarui otomatis) setelah akun `ACTIVE` dan menjadi ketua aktif.
-- Halaman **Kiosk Scanner** di laptop petugas yang membaca 2 QR (QR Mahasiswa & QR Proyektor) menggunakan webcam laptop, termasuk **jalur cadangan** pencarian manual oleh petugas jika HP/QR bermasalah.
-- Pengambilan dan penyimpanan foto wajah referensi saat registrasi serta foto dokumentasi transaksi melalui webcam. Foto peminjaman menampilkan orang yang secara fisik mengambil proyektor bersama unit; foto pengembalian berfokus pada unit dan, jika memungkinkan, orang yang menyerahkannya.
-- Konfirmasi sederhana satu langkah dengan dua pilihan, baik saat menerima maupun mengembalikan: **"Kondisi terlihat normal"** atau **"Laporkan kendala"**; tanpa checklist komponen.
-- **Batas waktu pengembalian (`due_at`)** dan daftar unit yang belum kembali/terlambat.
-- Logika *Smart Toggle*: server menentukan transaksi pinjam atau kembali dari status unit, disertai ringkasan transaksi dan konfirmasi sebelum penyimpanan.
-- Pengelolaan inventaris per unit fisik: setiap proyektor memiliki kode dan QR unik serta status masing-masing, lengkap dengan riwayat perubahan status.
-- Pengelolaan kelas dan semester oleh admin.
-- Dashboard Admin untuk melihat buku besar digital, dokumentasi foto, status unit, unit terlambat, riwayat perubahan status, dan audit akses foto.
-- Peran petugas (`STAFF`) dan admin (`ADMIN`) dengan akun individual, serta pembersihan foto otomatis sesuai masa retensi.
-
-### 2.2 Out of Scope (TIDAK boleh dikerjakan)
-- Integrasi langsung ke API SIAKAD / PDDikti pusat kampus.
-- Pencocokan wajah biometrik otomatis (*Facial Recognition matching*). Foto wajah registrasi dan foto transaksi adalah referensi visual yang dibandingkan secara manual oleh petugas.
-- OCR dan pembacaan otomatis KTM/KTP pada MVP (KTP tidak memuat NIM, dan verifikasi dilakukan tatap muka). Sistem tidak menyimpan NIK atau teks hasil baca dokumen.
-- Aplikasi native Android / iOS (semua berbasis Web Responsif).
-- Sistem booking/reservasi jadwal proyektor jauh-jauh hari.
-- Pembayaran denda keterlambatan online (Payment Gateway) dan penetapan sanksi otomatis.
-- Serah-terima langsung antar kelas tanpa pengembalian melalui Kiosk (unit harus dikembalikan lebih dulu).
-- Peminjaman lebih dari satu unit sekaligus oleh satu ketua kelas.
-- Akun mahasiswa non-ketua kelas untuk meminjam (hanya ketua kelas aktif).
-
-### 2.3 Asumsi dan Batasan
-- **Perangkat Keras**: 1 unit laptop standar di meja petugas dengan webcam internal minimal 720p dan koneksi internet. Satu webcam melayani pembacaan QR HP, pembacaan QR unit, dan foto dokumentasi; kelayakannya wajib diuji pada hari pertama (lihat Timeline Fase 0).
-- **Anggaran**: Rp 0 (free-tier Supabase dan Vercel). Konsekuensi yang diperhitungkan: project Supabase free dapat dijeda jika tidak aktif, kuota storage terbatas (1 GB), dan tidak ada backup otomatis (lihat NFR-10 dan Risiko).
-- **Akses Data**: Tidak ada database awal mahasiswa maupun daftar ketua kelas dari kampus. Database terbentuk saat pendaftaran; validasi awal dilakukan petugas secara tatap muka.
-- **Dokumen identitas**: KTM dan KTP diterima setara karena UNIMED belum menerbitkan KTM untuk semua mahasiswa. KTP tidak memuat NIM dan tidak membuktikan status mahasiswa, sehingga petugas memastikan status mahasiswa/ketua kelas melalui cara yang ditentukan TU (mis. menanyakan langsung atau melihat KRS di HP) dan mencatat hasil pemeriksaannya.
-- **Kelas**: Satu kelas = satu rombel tetap per kombinasi program studi + angkatan + rombel (mis. A/B/C) pada satu semester. Daftar kelas diisi admin sekali per semester. *(Asumsi; lihat Open Question.)*
-- **Inventaris**: Setiap unit proyektor dicatat sebagai satu baris aset tersendiri. Jumlah tersedia, dipinjam, dan dalam perawatan dihitung dari status masing-masing unit.
-- **Batas waktu pinjam**: Default `due_at` adalah akhir jam operasional TU pada hari peminjaman (nilai dapat diubah admin).
-- **Satu pinjaman aktif per ketua kelas** pada satu waktu.
-- **Pemeriksaan kondisi**: Tidak ada checklist rutin. Petugas TU memeriksa fisik hanya jika ada laporan kendala, kerusakan, atau indikasi masalah.
-- **Tanggung jawab kerusakan/keterlambatan**: Sistem hanya menyediakan bukti dan daftar; keputusan sanksi mengikuti kebijakan TU/kampus di luar sistem.
+### 1.7 Batasan Sistem
+1. Sistem beroperasi sebagai aplikasi web responsif (desktop browser dan mobile browser); tidak disediakan aplikasi native Android/iOS.
+2. Sistem tidak terhubung langsung ke basis data induk universitas (SIAKAD / PDDikti) karena keterbatasan izin akses jaringan kampus.
+3. Sistem mengandalkan satu kamera webcam laptop pada meja loket TU untuk membaca QR dan mengambil foto dokumentasi.
+4. Sistem tidak menjalankan inferensi biometrik otomatis (*facial recognition matching*) maupun OCR; seluruh keputusan verifikasi dilakukan secara manual oleh staf manusia (*human-in-the-loop*).
+5. Default batas waktu pengembalian (`due_at`) adalah akhir jam kerja operasional loket TU pada hari peminjaman (dapat disesuaikan oleh administrator).
 
 ---
 
-## 3. Requirement
+## BAB II — GAMBARAN UMUM PRODUK
 
-### 3.1 Functional
-| ID | Requirement (spesifik dan bisa diuji) | Peran |
-|----|---------------------------------------|-------|
-| FR-01 | Mahasiswa dapat mendaftar dengan Nama Lengkap, NIM, email, kata sandi, dan memilih kelas dari daftar baku melalui Supabase Auth; akun wajib menyelesaikan verifikasi email sebelum melanjutkan proses verifikasi. | Mahasiswa |
-| FR-01A | Mahasiswa mengambil foto wajah referensi dan foto dokumen identitas (KTM atau KTP, perlakuan setara) secara mandiri memakai kamera perangkat masing-masing (dilarang unggah dari galeri). Sistem menyediakan deteksi wajah (*face detection*) semata-mata sebagai panduan *framing* visual (keberadaan wajah, posisi tengah, dan jarak ideal), tanpa *facial recognition* atau biometrik otomatis. Seluruh gambar dan pratinjau kamera diproses secara normal tanpa efek mirror / pembalikan horizontal. Setelah foto dikirim, status pendaftaran menjadi `PENDING_REVIEW`. | Mahasiswa / Sistem |
-| FR-01B | Petugas Admin/TU memeriksa permohonan mahasiswa secara manual di halaman verifikasi dengan mencocokkan: (a) kesesuaian visual wajah mahasiswa pada foto dengan foto pada dokumen identitas, (b) nama pada dokumen identitas dengan nama registrasi, dan (c) kesesuaian kelas serta konfirmasi kelayakan sebagai ketua kelas. Hasil tiga pemeriksaan dicatat sebagai centang pada keputusan. Sistem tidak menjalankan OCR dan tidak menyimpan NIK atau teks hasil baca dokumen. | Petugas TU / Admin |
-| FR-01C | Petugas Admin/TU memutuskan pendaftaran: **Approve** (status menjadi `ACTIVE`), **Reject** (status menjadi `REJECTED`, wajib menyertakan alasan penolakan), atau **Request Resubmission** (status menjadi `RESUBMISSION_REQUIRED`, wajib menyertakan instruksi perbaikan). Pada seluruh keputusan, foto dokumen identitas dihapus secara permanen dari Supabase Storage segera setelah keputusan dibuat. Foto wajah referensi tetap disimpan selama akun aktif sesuai kebijakan retensi. | Petugas TU / Admin |
-| FR-01D | **Klaim ketua kelas**: pendaftar pertama pada kelas yang belum memiliki ketua menjadi calon ketua (klaim `INITIAL`, `PENDING`) dan disetujui petugas bersamaan dengan verifikasi. Pendaftar berikutnya pada kelas yang sudah memiliki ketua membuat klaim `REPLACEMENT` yang tidak berlaku otomatis dan harus diputuskan petugas. | Mahasiswa / Petugas TU |
-| FR-01E | Ketua kelas aktif dapat mengalihkan jabatan ke mahasiswa berstatus `ACTIVE` pada kelas yang sama. Pengalihan berlaku seketika, mencabut QR ketua lama, dan tercatat di audit log. | Mahasiswa |
-| FR-01F | Pada pergantian semester, kelas semester baru dibuat admin tanpa ketua. Mahasiswa `ACTIVE` mengklaim ulang kelasnya tanpa foto ulang; klaim tetap disetujui petugas. | Mahasiswa / Petugas TU / Admin |
-| FR-02 | Sistem menampilkan QR Pass hanya untuk akun `ACTIVE` yang menjadi ketua aktif sebuah kelas pada semester berjalan. Isi QR adalah token bertanda tangan berumur 60 detik yang diperbarui otomatis di layar dan tidak memuat NIM. Mahasiswa dapat mencabut QR (menaikkan versi token) kapan saja. | Sistem / Mahasiswa |
-| FR-03 | Halaman Kiosk dibuka pada tab terpisah (`target="_blank"`) dari Dashboard Admin agar dashboard tetap aktif dan dapat dipindahkan ke monitor kedua melalui sistem operasi. Kiosk dapat menyalakan webcam laptop, memindai QR secara terus-menerus tanpa refresh, menyediakan kontrol mode layar penuh (Fullscreen API), dan beroperasi secara terisolasi tanpa memuat navigasi atau menu pengelolaan admin. | Petugas / Kiosk |
-| FR-04 | Setelah QR mahasiswa dan QR unit valid terbaca, sistem menampilkan identitas keduanya, lalu mengambil foto dokumentasi dengan hitung mundur dan pratinjau yang dapat diulang. Pada peminjaman, foto memperlihatkan orang yang mengambil bersama unit proyektor. | Kiosk |
-| FR-05 | Saat QR proyektor valid terbaca, sistem menampilkan identitas unit, status inventarisnya, dan, jika `BORROWED`, peminjam aktif beserta `due_at`. | Kiosk |
-| FR-06 | Jika unit `AVAILABLE`, sistem menampilkan ringkasan peminjaman beserta `due_at` dan dua pilihan: "Kondisi terlihat normal" atau "Laporkan kendala". Pilihan normal membuat transaksi `ACTIVE` dan mengubah status unit menjadi `BORROWED`. Pilihan kendala **tidak** membuat transaksi; unit ditandai `MAINTENANCE` untuk diperiksa petugas. | Mahasiswa / Sistem |
-| FR-07 | Jika unit `BORROWED`, sistem menampilkan peminjam aktif dan meminta identitas pengembali: peminjam sendiri (memindai QR Pass) atau perwakilan (petugas mencatat nama perwakilan). Setelah foto pengembalian dan konfirmasi, transaksi menjadi `COMPLETED` dan unit `AVAILABLE`, kecuali kendala dilaporkan (unit menjadi `MAINTENANCE`). | Mahasiswa / Petugas / Sistem |
-| FR-08 | Konfirmasi kondisi dilakukan melalui satu tindakan dengan dua pilihan (normal / laporkan kendala) saat menerima maupun mengembalikan, tanpa checklist komponen. | Mahasiswa |
-| FR-09 | Jika ada laporan kendala atau petugas menemukan kerusakan, petugas dapat menambahkan catatan (dan foto opsional) lalu mengubah status unit menjadi `MAINTENANCE`, atau mengembalikannya ke `AVAILABLE` setelah diperiksa. Setiap perubahan status tercatat di riwayat status unit beserta alasan dan pelakunya. | Petugas TU / Admin |
-| FR-10 | Admin dapat menambah, mengubah, menonaktifkan, dan mencetak QR unik untuk setiap unit proyektor. Data transaksi lama tidak boleh hilang akibat penghapusan aset. | Admin |
-| FR-11 | Admin/petugas berwenang dapat melihat riwayat transaksi, identitas peminjam dan pengembali, petugas yang memproses, timestamp, foto peminjaman/pengembalian, dan status transaksi. Foto pengambilan dapat dibandingkan secara visual dengan foto wajah referensi akun. | Admin / Petugas |
-| FR-12 | Sistem menampilkan ringkasan inventaris: total unit aktif, tersedia, sedang dipinjam, terlambat, dan dalam perawatan. Angka dihitung dari data per unit dan transaksi. | Admin |
-| FR-13 | Sistem menyimpan foto wajah referensi selama akun aktif dan sesuai masa retensi pada NFR-08; foto hanya dapat diakses petugas berwenang untuk membantu pemeriksaan identitas. | Sistem / Admin |
-| FR-14 | Sistem mencatat status verifikasi, petugas yang memutuskan, waktu keputusan, hasil tiga centang pemeriksaan (FR-01B), dan alasan penolakan atau permintaan perbaikan. | Sistem / Petugas TU |
-| FR-15 | Setiap transaksi memiliki `due_at`. Transaksi `ACTIVE` dengan `due_at` yang sudah lewat ditampilkan sebagai terlambat pada dashboard dan pada Kiosk saat unit tersebut dipindai. Sistem tidak menjatuhkan sanksi otomatis. | Sistem / Admin |
-| FR-16 | **Jalur cadangan identifikasi**: jika QR tidak dapat ditampilkan (HP mati, tidak ada koneksi, sesi habis), petugas dapat mencari ketua kelas aktif berdasarkan NIM atau nama, memastikan dengan membandingkan foto wajah referensi, lalu melanjutkan transaksi. Cara identifikasi (`QR` atau `MANUAL_LOOKUP`) dan alasannya dicatat. | Petugas TU |
-| FR-17 | Satu ketua kelas hanya boleh memiliki satu transaksi `ACTIVE`, dan satu unit hanya boleh memiliki satu transaksi `ACTIVE`; keduanya dijamin oleh basis data, bukan hanya oleh logika aplikasi. | Sistem |
-| FR-18 | Admin dapat membuat, mengubah, dan menonaktifkan kelas serta semester akademik. Admin dapat melihat ketua aktif per kelas dan melepasnya jika diperlukan. | Admin |
-| FR-19 | Sistem mencatat audit log untuk: keputusan verifikasi dan klaim ketua, pengalihan jabatan, pencabutan QR, perubahan status unit, pembuatan signed URL foto, dan identifikasi manual. | Sistem |
-| FR-20 | Sistem menghapus foto yang telah melewati masa retensi (NFR-08) melalui tugas terjadwal harian, serta menandai ketua kelas yang masa berlakunya berakhir. | Sistem |
+### 2.1 Deskripsi Produk
+**PINJAM (SmartProjex)** adalah sistem informasi berbasis web yang memadukan teknologi web modern (Next.js 15 App Router, React 19, TypeScript, dan Tailwind CSS) dengan backend serverless Supabase (PostgreSQL, Supabase Auth, dan Supabase Storage) yang di-host pada platform Vercel. Sistem dirancang untuk melayani dua antarmuka utama:
+1. **Mobile Portal Mahasiswa**: Digunakan oleh mahasiswa untuk registrasi mandiri, mengunggah foto verifikasi langsung via kamera, melihat status verifikasi, menampilkan QR Pass dinamis berumur 60 detik, mencabut QR secara mandiri, dan mengalihkan kepemimpinan kelas.
+2. **Kiosk & Dashboard Administrasi**: Digunakan oleh staf TU dan Administrator di meja layanan untuk memindai QR, mengambil foto serah terima unit, memantau buku besar digital, mengelola rombel dan semester, serta mengelola siklus hidup aset proyektor.
 
-### 3.2 Non-Functional
-| ID | Kategori | Requirement |
-|----|----------|-------------|
-| NFR-01 | Performa | Proses baca QR hingga pengambilan *snapshot* kamera di browser memakan waktu < 1 detik. |
-| NFR-02 | Penyimpanan | Foto dikompres di sisi klien sebelum diunggah; target maksimal 250 KB per foto dengan kualitas yang masih cukup untuk melihat unit proyektor dan wajah. |
-| NFR-03 | Keamanan & Multi-Role | Halaman Kiosk dan Admin dilindungi autentikasi petugas dengan **satu akun per petugas** (tidak berbagi). Peran `STAFF` dan `ADMIN` dibedakan sesuai matriks hak akses 3.3 dan diverifikasi di sisi server (`guards` & layout server-side). Mahasiswa tidak dapat membuka rute admin/kiosk, dan petugas tidak dapat membuka rute mahasiswa. Tab dalam profil browser yang sama pada origin yang sama secara normal berbagi cookie sesi; pengujian simultan antar-peran (Admin vs Mahasiswa) dilakukan melalui **profil browser yang berbeda** (misal Chrome Profile 1 & 2) atau jendela browser terpisah tanpa merusak keamanan sesi Supabase Auth. Row Level Security aktif pada semua tabel; *service role key* hanya digunakan di server. |
-| NFR-04 | Kompatibilitas | Antarmuka QR Mahasiswa dan alur registrasi foto mandiri wajib responsif di layar mobile (Chrome Android / Safari iOS), dan Kiosk berjalan optimal di layar laptop / monitor kedua (1366x768 ke atas) dengan dukungan Fullscreen API. |
-| NFR-05 | Privasi & Integritas Gambar | Sistem menjelaskan tujuan pengambilan foto wajah referensi, foto dokumen kartu identitas, dan foto transaksi saat registrasi, lalu meminta persetujuan eksplisit. Seluruh foto wajib diambil secara langsung via kamera perangkat (dilarang unggah dari galeri/file picker). **Tidak boleh ada gambar yang mengalami efek mirror / pembalikan horizontal** pada pratinjau maupun hasil tangkapan. Deteksi wajah (*face detection*) semata-mata digunakan sebagai panduan penempatan (*framing*) visual dan jarak, tanpa pengenalan wajah (*facial recognition*), pencocokan otomatis, atau ekstraksi biometrik. |
-| NFR-06 | Integritas Data | Perubahan status unit dan penyimpanan transaksi dilakukan atomik dalam satu fungsi basis data. Basis data menegakkan *partial unique index* (satu transaksi aktif per unit dan per ketua kelas). Endpoint transaksi memakai *idempotency key* agar pengiriman ganda tidak membuat transaksi ganda. |
-| NFR-07 | Privasi | Foto wajah referensi, foto dokumen, dan foto transaksi disimpan pada bucket privat. Akses dibatasi berdasarkan peran, memakai signed URL berumur pendek (maks. 60 detik), dan setiap pembuatannya dicatat di audit log. Basis data menyimpan **path** objek storage, bukan URL. |
-| NFR-08 | Retensi Data | **Default MVP** (dapat diubah mengikuti kebijakan kampus): foto wajah referensi disimpan selama akun `ACTIVE` dan dihapus 90 hari setelah akun `INACTIVE`; foto dokumen dihapus segera setelah keputusan petugas (batas maksimal 24 jam); foto transaksi dihapus 180 hari setelah transaksi selesai, kecuali terkait kendala yang belum diselesaikan. Tidak ada NIK atau teks hasil baca dokumen yang disimpan. |
-| NFR-09 | Keandalan Verifikasi | Foto dokumen yang buram atau tidak terbaca tidak boleh otomatis dianggap pemalsuan atau langsung menolak mahasiswa; petugas dapat mengambil ulang foto atau memeriksa dokumen asli secara langsung. |
-| NFR-10 | Ketersediaan & Cadangan | Admin dapat mengekspor riwayat transaksi ke CSV; ekspor dilakukan minimal mingguan karena free-tier tidak menyediakan backup otomatis. Tugas terjadwal harian juga berfungsi menjaga project Supabase free tidak dijeda. Penggunaan storage dipantau dan admin diberi peringatan saat melewati 70% kuota. Tersedia prosedur cadangan manual (buku besar) jika sistem atau internet tidak dapat dipakai; transaksi manual diinput belakangan. |
-| NFR-11 | Waktu | Semua timestamp disimpan sebagai `timestamptz` dan ditampilkan dalam WIB (Asia/Jakarta). Waktu transaksi berasal dari server. |
+### 2.2 Visi dan Tujuan Produk
+Mewujudkan tata kelola logistik perlengkapan perkuliahan yang modern, transparan, akuntabel, dan mengutamakan perlindungan data pribadi (*privacy by design*) di lingkungan pendidikan tinggi.
 
-### 3.3 Matriks Hak Akses
-| Aksi | Mahasiswa | Petugas (`STAFF`) | Admin (`ADMIN`) |
-|------|:---------:|:-----------------:|:---------------:|
-| Melihat QR Pass sendiri, mencabut QR, mengalihkan jabatan | ✔ (jika ketua aktif) | – | – |
-| Memproses transaksi di Kiosk (termasuk pencarian manual) | – | ✔ | ✔ |
-| Mengambil foto verifikasi, memutuskan verifikasi dan klaim ketua | – | ✔ | ✔ |
-| Melihat foto wajah referensi dan foto transaksi (tercatat di audit log) | – | ✔ | ✔ |
-| Mengubah status unit ke `MAINTENANCE` / kembali ke `AVAILABLE` | – | ✔ | ✔ |
-| Menambah/menonaktifkan unit, mencetak QR unit | – | – | ✔ |
-| Mengelola kelas dan semester, melepas ketua kelas | – | – | ✔ |
-| Mengelola akun petugas, melihat audit log, ekspor CSV | – | – | ✔ |
+### 2.3 Target Pengguna
+- **Ketua Kelas Mahasiswa**: Mahasiswa aktif yang dipilih/ditugaskan sebagai perwakilan rombongan belajar perkuliahan.
+- **Rekan Mahasiswa (Perwakilan)**: Mahasiswa aktif satu rombel yang ditugaskan mengembalikan unit proyektor atas nama ketua kelas.
+- **Petugas Tata Usaha (Operator Loket / `STAFF`)**: Tenaga kependidikan yang bertugas menjaga loket proyektor dan melayani transaksi harian.
+- **Administrator Sistem (`ADMIN`)**: Kepala TU atau pengelola IT fakultas/jurusan yang memiliki wewenang penuh atas konfigurasi sistem.
+
+### 2.4 Stakeholder
+- **Pimpinan Fakultas/Jurusan**: Dekan, Wakil Dekan Bidang Keuangan dan Umum, Ketua Jurusan.
+- **Staf Tata Usaha / Perlengkapan**: Pelaksana operasional harian meja layanan.
+- **Dosen Pengampu**: Pengguna akhir fasilitas proyektor di ruang kuliah.
+- **Mahasiswa**: Peminjam proyektor untuk kegiatan presentasi dan pembelajaran.
+
+### 2.5 User Roles & Matriks Hak Akses
+
+Sistem membedakan tiga peran pengguna secara tegas di sisi server (Server-Side Role Guard & Layout Guards):
+
+| Aksi / Fungsi Sistem | Mahasiswa (`ACTIVE`) | Petugas TU (`STAFF`) | Administrator (`ADMIN`) |
+|---|:---:|:---:|:---:|
+| Registrasi mandiri & verifikasi email | ✔ | – | – |
+| Mengambil foto wajah & KTM/KTP via kamera perangkat | ✔ | – | – |
+| Melihat QR Pass dinamis sendiri (jika ketua aktif) | ✔ | – | – |
+| Mencabut QR Pass sendiri (*instant revoke*) | ✔ | – | – |
+| Mengalihkan kepemimpinan kelas ke rekan sekelas | ✔ | – | – |
+| Mengajukan klaim ketua kelas semester baru | ✔ | – | – |
+| Membuka dan mengoperasikan antarmuka Kiosk Loket | – | ✔ | ✔ |
+| Melakukan pencarian manual peminjam di Kiosk | – | ✔ | ✔ |
+| Memeriksa antrean verifikasi pendaftar & memutuskan | – | ✔ | ✔ |
+| Memutuskan permohonan klaim ketua kelas | – | ✔ | ✔ |
+| Melihat foto referensi & foto transaksi via Signed URL | – | ✔ | ✔ |
+| Mengubah status unit (`MAINTENANCE` ↔ `AVAILABLE`) | – | ✔ | ✔ |
+| Menambah, mengedit, menonaktifkan unit proyektor | – | – | ✔ |
+| Mencetak stiker lembar QR aset proyektor | – | – | ✔ |
+| Mengelola kelas baku, semester, dan salin kelas (*copy term*) | – | – | ✔ |
+| Melepas jabatan ketua kelas secara paksa | – | – | ✔ |
+| Mengelola akun petugas (tambah/edit/nonaktifkan staf) | – | – | ✔ |
+| Melihat jejak audit lengkap (*audit logs*) & ekspor CSV | – | – | ✔ |
+
+### 2.6 Product Scope (Batasan In-Scope v1.0.0)
+- Registrasi mandiri mahasiswa dengan pilihan rombel baku.
+- Panduan visual penempatan wajah (*face framing detection*) tanpa biometrik.
+- Pemotretan fisik dokumen identitas (KTM atau KTP, perlakuan setara) langsung dari kamera tanpa unggah berkas galeri.
+- Verifikasi manual 3 centang oleh petugas TU dan penghapusan permanen dokumen identitas segera setelah keputusan.
+- Token QR Pass 60 detik bertanda tangan HMAC-SHA256 tanpa menyertakan NIM di payload.
+- Dual-scan Kiosk dengan siklus kamera webcam persisten dan kontrol Fullscreen API.
+- Smart Toggle transaksi atomik (peminjaman vs pengembalian ditentukan server).
+- Dokumentasi foto serah terima unit proyektor.
+- Konfirmasi kondisi satu langkah (Normal vs Laporkan Kendala).
+- Pengembalian unit oleh peminjam langsung maupun perwakilan.
+- Jalur cadangan pencarian manual ketua kelas berfoto referensi.
+- Dashboard buku besar digital dengan metrik inventaris realtime dan filter keterlambatan.
+- Manajemen rombel kelas baku dan semester akademik.
+- Manajemen akun staf individual meja layanan TU.
+- Tugas pembersihan data terjadwal (*retention cron*).
+
+### 2.7 Out of Scope (Dilarang Dikerjakan pada v1.0.0)
+- Integrasi daring ke API SIAKAD / PDDikti universitas.
+- Algoritma pencocokan wajah otomatis (*Facial Recognition Matching*) atau inferensi biometrik.
+- Optical Character Recognition (OCR) otomatis pada dokumen identitas (KTP/KTM).
+- Penyimpanan Nomor Induk Kependudukan (NIK) mahasiswa di basis data.
+- Aplikasi native mobile iOS/Android (seluruhnya diakses via Web Responsif).
+- Sistem pemesanan / reservasi unit proyektor jauh-jauh hari (*advance booking*).
+- Gerbang pembayaran denda keterlambatan daring (*online payment gateway*).
+- Penjatuhan sanksi akademik atau denda otomatis oleh sistem.
+- Serah terima langsung unit antar-kelas tanpa melalui meja loket Kiosk.
+- Peminjaman lebih dari satu unit proyektor secara simultan oleh satu ketua kelas.
+- Peminjaman unit proyektor oleh mahasiswa yang bukan ketua kelas aktif.
 
 ---
 
-## 4. Core Feature
+## BAB III — KEBUTUHAN FUNGSIONAL
 
 ### FT-00 — Registrasi Mandiri, Verifikasi Kamera & Keputusan Admin
-- **Deskripsi**: Proses pendaftaran mandiri mahasiswa yang menggabungkan pengisian data, verifikasi email, pengambilan foto wajah mandiri dengan panduan face detection, pemotretan kartu identitas (KTM/KTP) langsung dari kamera tanpa unggah galeri, pemeriksaan sebelum pengiriman, serta pemeriksaan dan keputusan manual oleh Admin/TU.
-- **Alasan dibutuhkan**: Memungkinkan mahasiswa menyelesaikan pendaftaran foto secara mandiri dari perangkat masing-masing, sementara verifikasi dan persetujuan ketua kelas tetap diawasi secara cermat dan manual oleh petugas TU.
-- **Prioritas**: Must
-- **Requirement terkait**: FR-01, FR-01A, FR-01B, FR-01C, FR-01D, FR-01E, FR-01F, FR-13, FR-14
-- **Alur**:
-  1. **Tahap 1 — Pengisian Data**: Mahasiswa mengisi nama lengkap, NIM, email, kata sandi, memilih kelas dari daftar baku, dan mencentang persetujuan privasi. Supabase Auth mengirimkan tautan konfirmasi email.
-  2. **Tahap 2 — Pengambilan Foto Wajah**: Setelah email terverifikasi, mahasiswa menyalakan kamera perangkat. Sistem menjalankan *face detection* ringan sebagai panduan *framing* visual (memastikan wajah terdeteksi, berada di tengah panduan oval, dan jarak ideal). Foto diambil langsung dari kamera (tanpa unggah galeri, dilarang efek mirror). Mahasiswa dapat meninjau dan mengambil ulang.
-  3. **Tahap 3 — Pengambilan Foto Kartu Identitas**: Mahasiswa memotret fisik KTM atau KTP langsung via kamera perangkat dengan panduan kotak kartu identitas. Dilarang unggah dari galeri; sistem tidak menjalankan OCR dan tidak menyimpan NIK. Mahasiswa dapat meninjau dan mengambil ulang.
-  4. **Tahap 4 — Pemeriksaan Sebelum Pengiriman**: Mahasiswa melihat ringkasan lengkap data diri, foto wajah, dan foto kartu. Mahasiswa dapat kembali ke tahap sebelumnya untuk memperbaiki data atau foto. Setelah yakin, permohonan dikirimkan ke antrean admin (status menjadi `PENDING_REVIEW`).
-  5. **Pemeriksaan & Keputusan Admin**: Petugas Admin/TU memeriksa antrean verifikasi, mencocokkan visual wajah pada foto dengan foto kartu identitas, mencocokkan nama, dan memastikan kelayakan ketua kelas. Petugas memutuskan:
-     - `APPROVE`: status menjadi `ACTIVE`, klaim ketua `INITIAL` disetujui jika kelas belum berketua.
-     - `REJECT`: status menjadi `REJECTED` dengan catatan alasan penolakan wajib.
-     - `REQUEST_RESUBMISSION`: status menjadi `RESUBMISSION_REQUIRED` dengan instruksi perbaikan wajib; mahasiswa mengulang pengambilan foto dari akunnya.
-  6. **Penghapusan Foto Dokumen**: Pada ketiga jenis keputusan, foto kartu identitas segera dihapus secara permanen dari Supabase Storage. Foto wajah referensi disimpan selama akun berstatus aktif.
-- **Acceptance criteria**:
-  - [ ] Akun tidak dapat melakukan transaksi sebelum email terverifikasi, foto disetujui admin (status `ACTIVE`), dan menjadi ketua aktif kelasnya.
-  - [ ] Pilihan kelas berasal dari daftar baku; tidak ada input kelas bebas.
-  - [ ] Foto wajah dan foto kartu identitas wajib diambil langsung menggunakan kamera perangkat; tidak ada opsi unggah dari galeri/file picker.
-  - [ ] Tidak ada satu pun gambar (pratinjau kamera depan/belakang, kanvas, hasil foto, maupun tampilan admin) yang mengalami efek mirror / pembalikan horizontal (`scaleX(-1)` dilarang keras).
-  - [ ] *Face detection* hanya berfungsi memandu posisi dan jarak wajah; tidak ada pengenalan wajah otomatis (*facial recognition*) atau inferensi biometrik.
-  - [ ] KTM dan KTP diterima dengan perlakuan setara; sistem tidak menyimpan NIK maupun teks hasil baca OCR.
-  - [ ] Petugas dapat memutuskan Approve, Reject (dengan alasan), atau Request Resubmission (dengan instruksi); ketiga centang pemeriksaan manual tercatat.
-  - [ ] Foto dokumen identitas terhapus secara permanen dari Supabase Storage segera setelah keputusan dibuat; foto wajah referensi tetap tersedia selama akun aktif.
-  - [ ] Dua pendaftar dengan NIM sama dapat berada di antrean, tetapi hanya satu yang dapat berstatus `ACTIVE`; antrean menandai duplikasi NIM kepada petugas.
-- **Status**: Selesai
+- **Status Implementasi**: `IMPLEMENTED` (Dibuktikan oleh `src/app/(student)/register/page.tsx`, `src/components/registration/*`, `src/lib/face-detection.ts`, `src/app/api/students/profile/route.ts`, `src/app/api/students/me/verification-photos/route.ts`, `src/app/admin/verifications/page.tsx`, `src/components/admin/VerificationCapture.tsx`, dan `src/app/api/admin/verifications/*`).
+- **Batasan Pengujian Aktual**: Logika antarmuka kamera, framing deteksi wajah, dan penghapusan dokumen telah teruji 100% pada level unit test dan integrasi staging API. Pengujian operasional tatap muka mahasiswa nyata di loket TU akan dilaksanakan pada fase pilot kampus.
+- **Deskripsi**: Alur pendaftaran mandiri mahasiswa yang menggabungkan pengisian identitas profil, verifikasi email institusi/pribadi, pengambilan foto wajah mandiri dengan panduan framing visual, pemotretan dokumen identitas (KTM/KTP) secara langsung via kamera, ringkasan pra-kirim, serta evaluasi manual oleh staf TU.
+- **Rincian Fungsional**:
+  1. Mahasiswa menginput Nama Lengkap, NIM, Email, Kata Sandi, memilih rombel dari daftar kelas baku, dan menyetujui pernyataan persetujuan privasi data. Akun dibuat di Supabase Auth berstatus `UNVERIFIED_EMAIL`.
+  2. Konfirmasi email dikirimkan oleh Supabase Auth. Setelah diklik, status berubah menjadi `PENDING_DOCUMENT`.
+  3. Mahasiswa menyalakan kamera depan/belakang perangkat. Sistem menjalankan deteksi wajah (*face detection*) berbasis pustaka ringan semata-mata untuk memandu posisi wajah (tengah oval panduan dan jarak ideal). **Dilarang keras menggunakan biometrik otomatis atau pengenalan identitas**. Seluruh pratinjau kamera dan hasil tangkapan wajib diproses secara normal tanpa efek mirror (`scaleX(-1)` dilarang).
+  4. Mahasiswa memotret fisik kartu KTM atau KTP secara langsung via kamera perangkat dengan bantuan kotak panduan kartu (dilarang unggah dari galeri; sistem tidak menjalankan OCR dan tidak menyimpan NIK).
+  5. Mahasiswa memeriksa ringkasan data diri dan kedua foto pada tahap Review. Setelah dikirimkan, status permohonan menjadi `PENDING_REVIEW`.
+  6. Staf TU memeriksa antrean verifikasi di `/admin/verifications`, melihat foto wajah dan foto dokumen berdampingan (*side-by-side*), serta mencentang 3 checklist manual wajib:
+     - `face_match`: Kesesuaian visual wajah mahasiswa pada foto dengan foto pada dokumen identitas.
+     - `name_match`: Kesesuaian nama pada dokumen identitas dengan nama terdaftar.
+     - `status_confirmed`: Kesesuaian kelas dan konfirmasi keabsahan mahasiswa sebagai ketua kelas.
+  7. Keputusan Petugas:
+     - `APPROVE`: Status mahasiswa menjadi `ACTIVE`. Klaim ketua awal (`INITIAL`) otomatis disetujui jika kelas belum memiliki ketua.
+     - `REJECT`: Status menjadi `REJECTED`, mewajibkan pengisian catatan alasan penolakan.
+     - `REQUEST_RESUBMISSION`: Status menjadi `RESUBMISSION_REQUIRED`, mewajibkan catatan instruksi perbaikan agar mahasiswa dapat memotret ulang dari portalnya.
+  8. **Penghapusan Instan Foto Dokumen**: Pada ketiga jenis keputusan di atas, berkas foto dokumen kartu identitas dihapus secara permanen dari Supabase Storage seketika itu juga. Foto wajah referensi disimpan selama akun aktif sebagai pembanding visual manual di meja loket.
 
-### FT-01 — QR Pass Ketua Kelas (Mobile View)
-- **Deskripsi**: Halaman mahasiswa yang menampilkan QR Pass berupa token bertanda tangan berumur singkat, serta pengalihan jabatan ketua.
-- **Alasan dibutuhkan**: Ketua kelas mengidentifikasi akun dengan cepat tanpa KTP/KTM, tanpa mengekspos NIM, dan tangkapan layar QR tidak dapat dipakai ulang oleh orang lain.
-- **Prioritas**: Must
-- **Requirement terkait**: FR-01E, FR-02
-- **Acceptance criteria**:
-  - [ ] Hanya akun `ACTIVE` dengan email terverifikasi yang menjadi ketua aktif kelas pada semester berjalan yang dapat melihat QR.
-  - [ ] Layar menampilkan Nama, NIM, kelas, dan QR Code berukuran minimal 220x220 px dengan *quiet zone* putih dan hitung mundur masa berlaku.
-  - [ ] QR diperbarui otomatis sebelum kedaluwarsa (60 detik); QR yang sudah kedaluwarsa ditolak server.
-  - [ ] QR tidak berisi NIM; tidak ada tombol unduh QR.
-  - [ ] Tersedia tombol "Cabut QR" dan "Alihkan jabatan ketua".
-  - [ ] Layar menampilkan instruksi menaikkan *brightness* dan pesan jelas jika HP tidak ada koneksi.
-- **Status**: Belum
+### FT-01 — QR Pass Mahasiswa & Pengelolaan Jabatan Ketua
+- **Status Implementasi**: `IMPLEMENTED` (Dibuktikan oleh `src/app/(student)/my-qr/page.tsx`, `src/lib/qr-token.ts`, `src/app/api/students/me/qr/route.ts`, `src/app/api/students/me/qr/revoke/route.ts`, `src/app/api/students/me/leader/transfer/route.ts`, dan `src/components/student/ClaimClassModal.tsx`).
+- **Deskripsi**: Antarmuka mobile untuk ketua kelas aktif yang menampilkan QR Pass dinamis berumur singkat dan fitur manajemen peran ketua kelas.
+- **Rincian Fungsional**:
+  1. Halaman `/my-qr` hanya dapat diakses oleh akun mahasiswa berstatus `ACTIVE` yang sedang menjabat sebagai ketua kelas aktif pada semester berjalan (`classes.leader_student_id = student.id`).
+  2. QR Pass memuat token JSON Web Signature (JWS) bertanda tangan HMAC-SHA256 (`HS256`) dengan masa berlaku 60 detik (`exp`). Token diperbarui otomatis di layar ponsel setiap 45 detik.
+  3. Payload token hanya memuat ID mahasiswa (`sub`), versi token (`v`), dan waktu kedaluwarsa (`exp`). **Dilarang mencantumkan NIM mahasiswa pada payload token QR**.
+  4. Antarmuka menampilkan Nama Lengkap, NIM, Program Studi, Angkatan, Rombel, hitung mundur masa berlaku token, instruksi menaikkan kecerahan layar, serta ketiadaan tombol unduh QR untuk mencegah pembagian screenshot.
+  5. Fitur **Cabut QR**: Mahasiswa dapat menekan tombol "Cabut QR", yang akan menaikkan nilai `students.qr_token_version` di database secara instan (`POST /api/students/me/qr/revoke`), sehingga token sebelumnya seketika tidak berlaku di server.
+  6. Fitur **Alihkan Jabatan (*Transfer Leader*)**: Ketua kelas aktif dapat mengalihkan jabatan ketua kepada rekan sekelasnya yang telah berstatus `ACTIVE` dalam rombel yang sama melalui modal konfirmasi eksplisit (`POST /api/students/me/leader/transfer`). Operasi berlangsung secara atomik (1-langkah langsung), mencabut QR ketua lama seketika, menetapkan ketua baru, dan mencatat audit log `LEADER_TRANSFERRED`.
 
-### FT-02 — Dual-Scan Kiosk, Dokumentasi Foto, Navigasi Tab & Fullscreen
-- **Deskripsi**: Halaman Kiosk dioperasikan pada tab terpisah dari Dashboard Admin (`target="_blank"`), dapat dipindahkan ke monitor kedua, dan mendukung mode layar penuh (Fullscreen API). Kiosk beroperasi mandiri tanpa memuat sidebar atau menu administrasi untuk memindai QR ketua kelas dan QR unit proyektor, mengambil foto dokumentasi, dan menyelesaikan transaksi dengan konfirmasi singkat. Menyediakan jalur cadangan pencarian manual.
-- **Alasan dibutuhkan**: Mempercepat transaksi tanpa checklist pemeriksaan rutin dan tanpa penitipan KTP, sekaligus memungkinkan operator tetap memantau dashboard admin di monitor utama saat melayani mahasiswa di monitor kedua.
-- **Prioritas**: Must
-- **Requirement terkait**: FR-03 sampai FR-08, FR-15, FR-16, FR-17
-- **Acceptance criteria**:
-  - [ ] Dibuka melalui tombol "Buka Kiosk" pada dashboard admin ke tab baru (`target="_blank"`, `rel="noopener noreferrer"`) tanpa menutup atau menggantikan halaman dashboard.
-  - [ ] Dapat dipindahkan ke monitor kedua melalui jendela browser sistem operasi dan menyesuaikan resolusi secara responsif.
-  - [ ] Menyediakan kontrol tombol Masuk/Keluar Layar Penuh menggunakan Fullscreen API browser dengan penanganan fallback jika peramban tidak mendukung.
-  - [ ] Tidak menampilkan sidebar dashboard admin, menu navigasi admin, atau informasi sensitif yang tidak dibutuhkan mahasiswa.
-  - [ ] Menampilkan *live feed* kamera webcam untuk pemindaian dual-scan berkelanjutan.
-  - [ ] Menampilkan identitas ketua kelas, kelas, dan unit proyektor yang sedang diproses; untuk unit `BORROWED` menampilkan peminjam aktif, `due_at`, dan penanda terlambat jika lewat.
-  - [ ] Mengambil foto dokumentasi setelah identitas dan unit tervalidasi, dengan hitung mundur dan pratinjau yang dapat diulang. Foto pinjam menampilkan orang yang mengambil bersama proyektor; foto kembali menampilkan unit dengan jelas dan pengembali jika memungkinkan.
-  - [ ] Menampilkan satu konfirmasi dengan dua pilihan: "Saya menerima/mengembalikan proyektor dalam kondisi yang terlihat normal" atau "Laporkan kendala".
-  - [ ] Jika kendala dilaporkan saat menerima, tidak ada transaksi dibuat dan unit ditandai `MAINTENANCE`; jika dilaporkan saat mengembalikan, transaksi `COMPLETED` dan unit `MAINTENANCE`.
-  - [ ] Pengembalian dapat dilakukan peminjam (scan QR) atau perwakilan (nama dicatat petugas).
-  - [ ] Tersedia pencarian manual ketua kelas aktif (NIM/nama) dengan pembanding foto wajah referensi; cara identifikasi dicatat.
-  - [ ] Tidak ada checklist komponen atau pemeriksaan fisik wajib pada transaksi normal.
-  - [ ] Transaksi hanya disimpan setelah validasi dan konfirmasi; sistem memberi notifikasi sukses dan mereset sesi Kiosk.
-  - [ ] Pengiriman ganda (klik dua kali / koneksi putus-sambung) tidak membuat transaksi ganda.
-- **Status**: Selesai
+### FT-02 — Dual-Scan Kiosk Meja Layanan TU
+- **Status Implementasi**: `IMPLEMENTED` (Dibuktikan oleh `src/app/kiosk/page.tsx`, `src/components/kiosk/QrScannerBox.tsx`, `src/lib/kiosk-workflow.ts`, `src/app/api/kiosk/session/route.ts`, `src/app/api/kiosk/unit/route.ts`, `src/app/api/kiosk/transaction/route.ts`, dan `src/app/api/kiosk/students/search/route.ts`).
+- **Batasan Pengujian Aktual**: Logika pemindaian dual-scan, state machine Kiosk, Smart Toggle, idempotensi, dan mutasi status basis data teruji 100% pada level unit test dan integrasi staging API. Pengujian perangkat keras webcam laptop fisik dan proyektor fisik sesungguhnya di loket kampus dijadwalkan pada fase pilot operasional.
+- **Deskripsi**: Antarmuka Kiosk mandiri yang dioperasikan staf loket TU pada tab terpisah dan layar penuh untuk melayani transaksi serah terima peminjaman dan pengembalian unit proyektor secara cepat.
+- **Rincian Fungsional**:
+  1. Dibuka dari tombol "Buka Kiosk" pada dashboard admin ke tab baru (`target="_blank"`, `rel="noopener noreferrer"`) agar dashboard pemantauan admin tetap aktif di tab utama dan Kiosk dapat digeser ke monitor kedua.
+  2. Mendukung kontrol Layar Penuh (*Fullscreen API*) dengan fallback penanganan peramban dan beroperasi mandiri tanpa memuat navigasi atau menu admin.
+  3. Menjalankan pemindaian terus-menerus (*continuous scan*) menggunakan siklus kamera webcam laptop yang persisten tanpa memuat ulang (*reload*) komponen kamera.
+  4. **Pemindaian QR Ganda (*Dual-Scan*)**:
+     - Langkah 1: Memindai QR Pass mahasiswa. Server memverifikasi signature HS256, expiration, keaktifan akun (`ACTIVE`), status ketua aktif, dan kesesuaian versi token. Server menerbitkan `kiosk_session_id` berumur 120 detik.
+     - Langkah 2: Memindai QR fisik unit proyektor. Server membaca status unit dari basis data.
+  5. **Smart Toggle Transaksi**:
+     - Jika unit `AVAILABLE`: Sistem menjalankan alur **Peminjaman**. Menampilkan identitas ketua kelas, rombel, unit proyektor, dan estimasi waktu kembali (`due_at`).
+     - Jika unit `BORROWED`: Sistem menjalankan alur **Pengembalian**. Menampilkan peminjam aktif, batas waktu, penanda terlambat (*overdue*), dan meminta identitas pengembali (Peminjam Sendiri via scan QR atau Perwakilan dengan pencatatan nama oleh petugas).
+  6. **Dokumentasi Foto & Konfirmasi Kondisi**:
+     - Mengambil foto dokumentasi serah terima via webcam dengan hitung mundur 3 detik dan pratinjau ulang. Foto pinjam memperlihatkan peminjam bersama unit; foto kembali memperlihatkan fisik unit dan pengembali.
+     - Menampilkan konfirmasi satu langkah dengan dua pilihan visual setara:
+       - **"Kondisi terlihat normal"**: Menyimpan transaksi `ACTIVE` (peminjaman) atau `COMPLETED` (pengembalian).
+       - **"Laporkan kendala"**: Jika saat meminjam, transaksi dibatalkan dan unit menjadi `MAINTENANCE`. Jika saat mengembalikan, transaksi menjadi `COMPLETED` dengan `return_condition = 'REPORTED_ISSUE'` dan unit menjadi `MAINTENANCE`.
+  7. **Jalur Cadangan (*Manual Lookup*)**: Jika HP mahasiswa mati atau QR gagal dipindai, petugas dapat mencari ketua kelas aktif berdasarkan Nama/NIM, membandingkan wajah fisik dengan foto referensi akun di layar, dan mencatat alasan identifikasi manual (`identification_method = 'MANUAL_LOOKUP'`).
+  8. **Proteksi Idempotensi**: Setiap pengiriman transaksi menyertakan `idempotency_key` acak berbasis UUID/kriptografis di sisi klien untuk mencegah transaksi ganda akibat klik ganda atau gangguan jaringan.
 
-### FT-03 — Dashboard Buku Besar Digital, Inventaris & Keterlambatan
-- **Deskripsi**: Panel admin/petugas untuk memantau status setiap unit, riwayat transaksi, unit terlambat, dokumentasi foto, riwayat perubahan status, dan pengelolaan QR aset.
-- **Alasan dibutuhkan**: Menggantikan buku besar fisik dan memudahkan pelacakan unit yang sedang dipinjam, terlambat, atau mengalami masalah.
-- **Prioritas**: Must
-- **Requirement terkait**: FR-09 sampai FR-12, FR-15, FR-19
-- **Acceptance criteria**:
-  - [ ] Menampilkan jumlah unit Total, Tersedia, Sedang Dipinjam, Terlambat, dan Dalam Perawatan.
-  - [ ] Jumlah inventaris dihitung dari status setiap unit dan transaksi.
-  - [ ] Menampilkan daftar "belum kembali / terlambat" yang dapat difilter.
-  - [ ] Menampilkan tabel riwayat dengan kolom: Waktu Ambil, Batas Waktu, Waktu Kembali, Nama & NIM Peminjam, Kelas, Nama/Kode Proyektor, Foto Referensi, Foto Ambil, Foto Kembali, Pengembali, Petugas, dan Status. Foto wajah referensi hanya ditampilkan kepada petugas berwenang.
-  - [ ] Setiap pembukaan foto menghasilkan entri audit log.
-  - [ ] Admin dapat menambah, mengubah, dan menonaktifkan unit proyektor serta mencetak QR masing-masing.
-  - [ ] Admin/petugas dapat mencatat laporan kerusakan dan alasan perubahan status; riwayat perubahan status per unit dapat dilihat.
-  - [ ] Admin dapat mengekspor riwayat transaksi ke CSV.
-- **Status**: Belum
+### FT-03 — Buku Besar Digital, Inventaris & Keterlambatan
+- **Status Implementasi**: `IMPLEMENTED` (Dibuktikan oleh `src/app/admin/page.tsx`, `src/components/admin/AdminDashboardView.tsx`, `src/components/admin/ProjectorsInventoryView.tsx`, `src/app/admin/projectors/page.tsx`, `src/app/api/admin/loans/route.ts`, `src/app/api/admin/export/loans/route.ts`, `src/app/api/admin/projectors/*`, `src/app/api/admin/photos/sign/route.ts`, dan `src/components/admin/AuditLogsView.tsx`).
+- **Deskripsi**: Pusat pemantauan dan pengelolaan operasional TU untuk menggantikan buku besar kertas dan mengelola inventaris proyektor kampus.
+- **Rincian Fungsional**:
+  1. Kartu Ringkasan Metrik Realtime: Menampilkan 5 metrik inventaris: Total Unit, Unit Tersedia (`AVAILABLE`), Sedang Dipinjam (`BORROWED`), Terlambat (*Overdue*), dan Dalam Perawatan (`MAINTENANCE`).
+  2. Pemantauan Keterlambatan: Daftar khusus transaksi aktif yang melewati `due_at` dengan penanda visual keterlambatan.
+  3. Tabel Riwayat Peminjaman Lengkap: Kolom waktu ambil, batas waktu, waktu kembali, identitas peminjam, kelas, kode/nama unit, foto referensi, foto ambil, foto kembali, identitas pengembali, petugas yang memproses, dan status transaksi.
+  4. Penampil Foto Aman: Foto dokumentasi dan foto referensi dibuka melalui *Signed URL* privat berdurasi maksimal 60 detik (`POST /api/admin/photos/sign`). Setiap pembukaan foto dicatat secara otomatis ke dalam tabel `audit_logs`.
+  5. Manajemen Inventaris Proyektor: Administrator dapat menambah unit baru, mengubah nama/catatan/nomor seri, menonaktifkan unit (`INACTIVE`), dan mencetak lembar QR aset unik per unit. Petugas TU dapat memperbarui status unit ke `MAINTENANCE` atau `AVAILABLE` dengan catatan alasan wajib.
+  6. Ekspor Laporan CSV: Administrator dapat mengekspor riwayat transaksi terfilter rentang tanggal ke dalam format berkas CSV (`GET /api/admin/export/loans`).
 
-### FT-04 — Manajemen Kelas, Semester & Ketua Kelas
-- **Deskripsi**: Pengelolaan daftar kelas baku, semester akademik, antrean klaim ketua kelas, dan pelepasan ketua.
-- **Alasan dibutuhkan**: Pilihan kelas yang baku mencegah duplikasi kelas akibat salah ketik dan membuat aturan "pendaftar pertama" dapat ditegakkan.
-- **Prioritas**: Must
-- **Requirement terkait**: FR-01D, FR-01E, FR-01F, FR-18, FR-20
-- **Acceptance criteria**:
-  - [ ] Admin dapat membuat kelas (prodi, angkatan, rombel, semester) dan menonaktifkannya.
-  - [ ] Kelas semester baru dapat dibuat dari salinan semester sebelumnya tanpa ketua.
-  - [ ] Antrean klaim menampilkan jenis klaim (`INITIAL`, `REPLACEMENT`, `TRANSFER`) dan kelas terkait.
-  - [ ] Status ketua kedaluwarsa otomatis saat semester berakhir; QR ketua lama berhenti berlaku.
-  - [ ] Admin dapat melepas ketua kelas secara manual dengan alasan yang tercatat.
-- **Status**: Belum
+### FT-04 — Manajemen Rombel Kelas, Semester & Klaim Ketua
+- **Status Implementasi**: `IMPLEMENTED` (Dibuktikan oleh `src/app/admin/classes/page.tsx`, `src/components/admin/LeaderClaimsInboxView.tsx`, `src/app/api/admin/classes/route.ts`, `src/app/api/admin/classes/copy-term/route.ts`, `src/app/api/admin/leader-claims/route.ts`, dan `src/app/api/admin/leader-claims/[id]/route.ts`).
+- **Deskripsi**: Modul pengelolaan struktur kelas baku, semester akademik, evaluasi klaim kepemimpinan, dan transisi rombel.
+- **Rincian Fungsional**:
+  1. Pengelolaan Kelas Baku: Administrator membuat kombinasi rombel resmi (Program Studi, Tahun Angkatan, Kode Rombel, Semester Akademik). Pendaftaran mahasiswa wajib memilih dari daftar kelas ini; tidak ada masukan teks bebas (*no free-text class input*).
+  2. Salin Kelas Antar-Semester (*Copy Term*): Administrator dapat menduplikasi seluruh struktur kelas dari semester aktif ke semester baru secara massal tanpa menyertakan ketua kelas lama (`POST /api/admin/classes/copy-term`).
+  3. Antrean Klaim Ketua Kelas (*Leader Claims Inbox*):
+     - Menampilkan seluruh permohonan klaim dengan rincian tipe: `INITIAL` (calon ketua pendaftar pertama), `REPLACEMENT` (pendaftar pada kelas yang sudah berketua), dan `TRANSFER` (pengalihan jabatan mandiri).
+     - Administrator dapat menyetujui (`APPROVED`) atau menolak (`REJECTED`) klaim dengan catatan alasan. Persetujuan klaim otomatis memperbarui `classes.leader_student_id` dan mencabut QR ketua lama.
+  4. Pelepasan Ketua Kelas Manual: Administrator memiliki wewenang untuk mencopot jabatan ketua kelas aktif sewaktu-waktu dengan alasan administratif yang tercatat pada audit log.
 
 ---
-## 5. User Flow
 
-### 5.1 Alur Registrasi Mandiri, Verifikasi & Klaim Ketua Kelas
-1. **Tahap 1 — Pengisian Data**: Mahasiswa mendaftar dengan Nama Lengkap, NIM, email, kata sandi, memilih kelas baku, dan menyetujui pernyataan privasi.
-2. **Verifikasi Email**: Mahasiswa memverifikasi email melalui tautan Supabase Auth. Setelah terverifikasi, status akun menjadi `PENDING_DOCUMENT`.
-3. **Tahap 2 — Pengambilan Foto Wajah Mandiri**: Mahasiswa mengaktifkan kamera perangkat. Sistem menjalankan *face detection* untuk memberikan panduan posisi (*framing* oval tengah dan jarak ideal). Mahasiswa mengambil foto secara langsung (tanpa unggah galeri, tanpa efek mirror). Foto dapat ditinjau dan diambil ulang.
-4. **Tahap 3 — Pengambilan Foto Kartu Identitas**: Mahasiswa memotret kartu fisik KTM atau KTP secara langsung via kamera perangkat dengan bantuan panduan kotak kartu identitas (tanpa unggah galeri dan tanpa OCR). Foto dapat ditinjau dan diambil ulang.
-5. **Tahap 4 — Pemeriksaan Sebelum Pengiriman**: Mahasiswa memeriksa ringkasan data diri dan kedua foto. Mahasiswa dapat kembali untuk memperbaiki data atau mengulang foto. Setelah yakin, permohonan dikirimkan ke server; status berubah menjadi `PENDING_REVIEW`.
-6. **Pemeriksaan Manual oleh Petugas Admin/TU**: Petugas membuka antrean verifikasi di dashboard admin dan melakukan pencocokan manual:
-   - (a) Kesesuaian visual wajah mahasiswa pada foto dengan foto pada dokumen identitas.
-   - (b) Kesesuaian nama pada dokumen identitas dengan nama terdaftar.
-   - (c) Kesesuaian informasi kelas dan konfirmasi kelayakan sebagai ketua kelas.
-7. **Keputusan Petugas**:
-   - **Disetujui (`APPROVE`)**: status menjadi `ACTIVE`; klaim ketua `INITIAL` disetujui jika kelas belum berketua.
-   - **Perlu Perbaikan (`REQUEST_RESUBMISSION`)**: status menjadi `RESUBMISSION_REQUIRED` dengan catatan instruksi perbaikan; mahasiswa dapat mengulang pengambilan foto dari portalnya.
-   - **Ditolak (`REJECT`)**: status menjadi `REJECTED` dengan catatan alasan penolakan wajib.
-8. **Penghapusan Instan Foto Dokumen**: Pada semua keputusan verifikasi (Approve, Reject, Resubmission), foto dokumen identitas dihapus permanen dari Supabase Storage. Foto wajah referensi tetap disimpan selama akun berstatus aktif.
-9. Jika kelas sudah memiliki ketua terdaftar, klaim tercatat sebagai `REPLACEMENT` dan menunggu keputusan terpisah dari petugas sebelum QR Pass diterbitkan.
+## BAB IV — KEBUTUHAN NONFUNGSIONAL
 
-**Pergantian semester**: mahasiswa `ACTIVE` memilih kelas baru dan mengajukan klaim tanpa foto ulang; petugas menyetujui secara singkat.
+| Parameter | Kebutuhan & Spesifikasi Terverifikasi | Status Implementasi |
+|---|---|:---:|
+| **NFR-01: Performa** | Pembacaan token QR Pass di Kiosk hingga pengambilan frame kamera berlangsung dalam waktu responsif (< 1 detik pada hardware loket standar). Transaksi normal tuntas ≤ 15 detik. | `IMPLEMENTED` |
+| **NFR-02: Penyimpanan** | Kompresi gambar sisi klien sebelum pengiriman (maksimal ukuran berkas target ≤ 250 KB per foto) dengan format JPEG/WebP kualitas memadai untuk identifikasi visual proyektor dan wajah. | `IMPLEMENTED` |
+| **NFR-03: Keamanan & Multi-Role** | Proteksi sesi di sisi server. Akun petugas individual (dilarang akun bersama). Penegakan Server Layout Guards terpisah antara Mahasiswa (`/(student)`), Kiosk (`/kiosk`), dan Admin (`/admin`). Pengujian simultan wajib menggunakan profil browser berbeda. | `IMPLEMENTED` |
+| **NFR-04: Kompatibilitas** | Antarmuka QR Pass dan registrasi foto responsif penuh di browser mobile (Chrome Android dan Safari iOS). Antarmuka Kiosk dan Dashboard optimal di resolusi desktop/laptop loket (1366x768 ke atas) serta mendukung monitor kedua. | `IMPLEMENTED` |
+| **NFR-05: Privasi & Integritas Gambar** | Pernyataan persetujuan privasi eksplisit sebelum pemotretan. Pemotretan langsung via kamera (dilarang unggah berkas galeri). **Dilarang efek mirror / pembalikan horizontal (`scaleX(-1)`)** pada seluruh kanvas dan tangkapan. Deteksi wajah murni sebagai panduan framing visual, tanpa pencocokan biometrik otomatis. | `IMPLEMENTED` |
+| **NFR-06: Integritas Data** | Seluruh mutasi peminjaman/pengembalian dieksekusi secara atomik dalam fungsi PL/pgSQL `process_loan_transaction` dengan *row-level locking* (`FOR UPDATE`). Penegakan partial unique index: maksimal 1 pinjaman aktif per proyektor dan per mahasiswa. Proteksi idempotency key pada transaksi. | `IMPLEMENTED` |
+| **NFR-07: Keamanan Penyimpanan** | Berkas foto wajah referensi dan foto transaksi disimpan dalam bucket privat Supabase Storage (`smartprojex-media`). Akses dibatasi RLS Storage dan hanya dapat dilihat melalui *Signed URL* berdurasi pendek (maksimal 60 detik). Setiap penerbitan Signed URL dicatat di `audit_logs`. | `IMPLEMENTED` |
+| **NFR-08: Retensi Data** | Penghapusan permanen dokumen kartu identitas (KTM/KTP) segera setelah keputusan verifikasi admin. Foto wajah referensi disimpan selama akun berstatus `ACTIVE` dan dihapus 90 hari setelah akun dinonaktifkan (`INACTIVE`). Foto transaksi normal dihapus 180 hari setelah selesai via Vercel Cron harian. | `IMPLEMENTED` |
+| **NFR-09: Keandalan Verifikasi** | Foto dokumen yang buram tidak otomatis menggagalkan akun; petugas dapat meminta perbaikan (*Request Resubmission*) dengan instruksi atau memeriksa fisik dokumen secara langsung di loket. | `IMPLEMENTED` |
+| **NFR-10: Ketersediaan & Cadangan** | Ekspor riwayat transaksi ke CSV dapat dilakukan administrator kapan saja. Tugas Vercel Cron harian menjaga proyek Supabase free-tier tetap aktif (*keep-alive*). Prosedur cadangan buku besar manual disiapkan saat internet padam dan dapat diinput belakangan. | `IMPLEMENTED` |
+| **NFR-11: Penanganan Waktu** | Seluruh kolom timestamp disimpan dengan tipe `timestamptz` di PostgreSQL. Sumber waktu transaksi berasal dari server basis data. Seluruh tampilan antarmuka diseragamkan dalam Waktu Indonesia Barat (`Asia/Jakarta` / WIB). | `IMPLEMENTED` |
 
-**Serah-terima jabatan**: ketua aktif memilih rekan sekelas berstatus `ACTIVE`, jabatan pindah seketika, QR ketua lama dicabut, kejadian masuk audit log.
+---
 
-### 5.2 Alur Utama Dual-Scan
+## BAB V — ATURAN BISNIS (BUSINESS RULES)
 
-#### A. Peminjaman (Unit `AVAILABLE`)
-1. Ketua kelas membuka halaman QR Pass di HP; token otomatis diperbarui tiap 45 detik.
-2. Ketua kelas menunjukkan QR ke webcam Kiosk. Server memverifikasi token (tanda tangan, kedaluwarsa, versi, status akun, status ketua) dan membuat sesi Kiosk singkat.
-3. Petugas atau ketua kelas memindai QR unit proyektor.
-4. Server menentukan: unit `AVAILABLE` → alur peminjaman.
-5. Kiosk menampilkan ringkasan: identitas ketua kelas, kelas, unit, dan `due_at`.
-6. Kiosk mengambil foto dokumentasi (ketua kelas bersama unit) dengan hitung mundur dan pratinjau; foto dapat diulang.
-7. Ketua kelas memilih **"Kondisi terlihat normal"** atau **"Laporkan kendala"**.
-8. Jika normal: server menjalankan fungsi atomik (validasi, simpan transaksi `ACTIVE`, simpan foto, status unit `BORROWED`). Kiosk menampilkan notifikasi sukses.
-9. Jika kendala: tidak ada transaksi; unit `MAINTENANCE` untuk diperiksa petugas dan alasannya dicatat.
+1. **Aturan Hak Peminjaman (BR-01)**:
+   Hanya mahasiswa yang memenuhi tiga syarat kumulatif yang dapat meminjam proyektor: (1) Akun berstatus `ACTIVE`, (2) Email terverifikasi, dan (3) Menjabat sebagai ketua kelas aktif pada semester berjalan (`classes.leader_student_id = student.id`).
+2. **Aturan Batas Pinjaman Aktif (BR-02)**:
+   Satu ketua kelas hanya diperbolehkan meminjam maksimal **1 unit proyektor** pada satu waktu. Sistem menolak peminjaman baru jika ketua kelas masih memiliki transaksi berstatus `ACTIVE`.
+3. **Aturan Status Unit Proyektor (BR-03)**:
+   Satu unit proyektor hanya dapat dipinjam jika berstatus `AVAILABLE`. Unit berstatus `BORROWED`, `MAINTENANCE`, atau `INACTIVE` ditolak oleh sistem untuk peminjaman baru.
+4. **Aturan Batas Waktu Pengembalian (BR-04)**:
+   Setiap peminjaman memiliki batas waktu pengembalian (`due_at`) yang secara baku ditentukan oleh akhir jam operasional meja TU pada hari peminjaman (diambil dari `app_settings.operational_hours`), kecuali diatur khusus oleh administrator.
+5. **Aturan Pengembalian Fleksibel (BR-05)**:
+   Pengembalian proyektor dapat dilakukan oleh ketua kelas sendiri (memindai QR Pass) atau oleh rekan mahasiswa perwakilan satu kelas. Jika dilakukan oleh perwakilan, staf TU wajib mencatat nama lengkap perwakilan pada sistem.
+6. **Aturan Penetapan Ketua Kelas Pertama (BR-06)**:
+   Pendaftar pertama yang memilih rombel kelas yang belum memiliki ketua akan menghasilkan klaim berjenis `INITIAL` dengan status `PENDING`. Klaim ini otomatis disetujui saat staf TU menyetujui verifikasi pendaftaran mahasiswa bersangkutan.
+7. **Aturan Pergantian & Transfer Ketua (BR-07)**:
+   Pendaftar pada kelas yang sudah memiliki ketua menghasilkan klaim berjenis `REPLACEMENT` yang wajib dievaluasi terpisah oleh administrator. Pengalihan mandiri oleh ketua aktif (`TRANSFER`) hanya dapat diarahkan kepada mahasiswa berstatus `ACTIVE` dalam rombel yang sama dan langsung berlaku seketika (*instant revocation* QR lama).
+8. **Aturan Masa Berlaku Semester (BR-08)**:
+   Jabatan ketua kelas berlaku selama satu semester akademik berjalan. Pada pergantian semester baru, seluruh jabatan ketua kelas kedaluwarsa secara otomatis dan mahasiswa aktif mengajukan klaim rombel baru tanpa perlu memotret ulang dokumen identitas.
+9. **Aturan Penanganan Kerusakan Unit (BR-09)**:
+   Jika peminjam atau pengembali memilih opsi "Laporkan kendala", unit otomatis berubah status menjadi `MAINTENANCE`. Sistem tidak menjatuhkan sanksi atau denda moneter secara otomatis; keputusan tanggung jawab diselesaikan oleh pihak kampus di luar sistem berdasarkan bukti foto dokumentasi.
+10. **Aturan Jalur Cadangan Loket (BR-10)**:
+    Jika ketua kelas tidak dapat menampilkan QR Pass (ponsel kehabisan daya, kendala sinyal, atau layar retak), staf loket diperbolehkan melakukan pencarian manual (*Manual Lookup*) dengan syarat wajib mencocokkan wajah peminjam dengan foto referensi di layar dan mencatat alasan pencarian manual.
 
-#### B. Pengembalian (Unit `BORROWED`)
-1. Petugas atau pengembali memindai QR unit proyektor. Server menemukan transaksi `ACTIVE` dan Kiosk menampilkan peminjam, `due_at`, dan penanda terlambat bila perlu.
-2. Identitas pengembali:
-   - **Peminjam sendiri**: memindai QR Pass.
-   - **Perwakilan**: petugas mencatat nama perwakilan.
-3. Kiosk mengambil foto pengembalian (unit dan, jika memungkinkan, pengembali).
-4. Pengembali memilih **"Kondisi terlihat normal"** atau **"Laporkan kendala"**.
-5. Jika normal: transaksi `COMPLETED`, unit `AVAILABLE`.
-6. Jika kendala: transaksi `COMPLETED` dengan kondisi `REPORTED_ISSUE`, unit `MAINTENANCE`, catatan kendala tercatat.
+---
 
-#### C. Pemeriksaan Petugas (hanya jika ada kendala atau indikasi masalah)
-1. Petugas memeriksa fisik unit.
-2. Petugas mengubah status unit ke `MAINTENANCE` atau kembali ke `AVAILABLE` dengan alasan.
-3. Foto dan riwayat transaksi dipakai sebagai bukti pendukung; penentuan tanggung jawab dilakukan petugas di luar sistem sesuai kebijakan TU.
+## BAB VI — ARSITEKTUR SISTEM
 
-#### D. Jalur Cadangan (QR tidak dapat dipakai)
-1. Petugas memilih "Cari manual" di Kiosk dan mencari ketua kelas aktif berdasarkan NIM atau nama.
-2. Petugas membandingkan wajah orang di depan dengan foto wajah referensi.
-3. Petugas mencatat alasan, lalu alur peminjaman/pengembalian berlanjut. Cara identifikasi tercatat sebagai `MANUAL_LOOKUP`.
+### 6.1 Komponen Arsitektur Teknologi
+- **Frontend Layer**: Next.js 15 (App Router), React 19, TypeScript (Strict Mode), Tailwind CSS, Headless UI / Lucide React icons.
+- **API & Backend Layer**: Next.js Server Route Handlers (Edge & Node.js Serverless runtime di Vercel), Zod Schema Validation, Jose Library (HMAC-SHA256 Token Signing).
+- **Database & Auth Layer**: Supabase Managed PostgreSQL dengan Row Level Security (RLS), Supabase Auth (GoTrue), Supabase Storage Bucket.
+- **Hosting & Infrastructure**: Vercel Platform (Deployment, Serverless Execution, Vercel Cron).
 
-#### E. Jika Sistem/Internet Tidak Tersedia
-Petugas memakai buku besar manual sebagai cadangan dan menginput transaksinya ke sistem setelah layanan pulih.
-
-### 5.3 Edge Case Utama
-| Kondisi | Perilaku yang diharapkan |
-|---------|--------------------------|
-| QR mahasiswa kedaluwarsa atau versi lama | Ditolak dengan pesan jelas; mahasiswa memuat ulang QR. |
-| Mahasiswa bukan ketua aktif atau akun bukan `ACTIVE` | Ditolak, status ditampilkan; petugas dapat mengarahkan ke verifikasi/klaim. |
-| Ketua kelas sudah punya transaksi `ACTIVE` | Peminjaman baru ditolak; sistem menampilkan unit yang sedang dibawa. |
-| QR unit tidak dikenal atau unit nonaktif | Ditolak dengan pesan jelas. |
-| Unit berstatus `MAINTENANCE` | Peminjaman ditolak. |
-| Unit `BORROWED` dipindai oleh ketua kelas lain | Tampilkan peminjam aktif; pengembalian dicatat sebagai pengembali berbeda hanya jika petugas memilih "Perwakilan". |
-| Foto gagal diambil | Transaksi tidak dapat diselesaikan; petugas mengulang atau memakai jalur cadangan. |
-| Pengiriman transaksi ganda | Idempotency key mencegah transaksi ganda. |
-| Unit melewati `due_at` | Ditandai terlambat di dashboard dan Kiosk; tidak ada sanksi otomatis. |
-| Kelas dipakai dua klaim bersamaan | Hanya satu klaim `INITIAL` yang dapat disetujui; sisanya menjadi `REPLACEMENT`. |
-| Semester berganti | Ketua lama kedaluwarsa; klaim ulang diperlukan. |
-
-### 5.4 Diagram Alur
+### 6.2 Diagram Arsitektur Komponen
 
 ```mermaid
 flowchart TD
-    REG[Daftar akun + pilih kelas] --> EMAIL[Verifikasi email]
-    EMAIL --> TU[Sesi tatap muka di TU]
-    TU --> CAP[Petugas ambil foto wajah + foto KTM atau KTP]
-    CAP --> REVIEW[Petugas cocokkan wajah, nama, status, klaim ketua]
-    REVIEW -->|Disetujui| ACTIVE[Akun ACTIVE + ketua kelas aktif + QR Pass]
-    REVIEW -->|Perlu ulang atau Ditolak| FIX[Instruksi perbaikan atau alasan penolakan]
-    ACTIVE --> A[Kiosk Standby]
-    A --> B[Scan QR Mahasiswa atau cari manual]
-    B --> C{Mahasiswa valid dan ketua aktif?}
-    C -->|Tidak| X[Tampilkan pesan error]
-    C -->|Ya| D[Scan QR Proyektor]
-    D --> E{Status unit?}
-    E -->|AVAILABLE| F[Tampilkan ringkasan dan batas waktu kembali]
-    F --> G[Ambil foto peminjam dan unit]
-    G --> H{Kondisi saat menerima}
-    H -->|Normal| I[Simpan transaksi ACTIVE dan foto]
-    I --> J[Status unit BORROWED]
-    H -->|Ada kendala| H2[Batalkan peminjaman, unit MAINTENANCE]
-    E -->|BORROWED| K[Tampilkan peminjam aktif dan due_at]
-    K --> K2[Peminjam scan QR atau petugas catat perwakilan]
-    K2 --> L[Ambil foto unit saat kembali]
-    L --> M{Kondisi terlihat normal?}
-    M -->|Ya| N[Konfirmasi pengembalian]
-    N --> O[Transaksi COMPLETED]
-    O --> P[Status unit AVAILABLE]
-    M -->|Ada kendala| Q[Catat laporan kendala]
-    Q --> R[Transaksi COMPLETED, unit MAINTENANCE]
-    E -->|MAINTENANCE| S[Tolak peminjaman]
-    J --> T[Notifikasi sukses dan reset Kiosk]
-    P --> T
-    R --> T
-    H2 --> T
-    X --> A
-    S --> A
-    T --> A
+    subgraph ClientLayer["Frontend Client Layer"]
+        MobileClient["Mobile Web (Mahasiswa)\n- Register & Camera Capture\n- Dynamic QR Pass (60s)"]
+        KioskClient["Kiosk Meja Loket (TU)\n- Dual-Scan Camera\n- Transaction Capture"]
+        AdminClient["Admin Dashboard\n- Ledger, Overdue, Inventory\n- Verifications & Claims"]
+    end
+
+    subgraph ServerLayer["Next.js 15 Backend (Vercel)"]
+        Middleware["Server Layout Guards\n& Session Redirects"]
+        RouteHandlers["Route Handlers (/api/*)\n- Zod Input Validation\n- JOSE HS256 Signing\n- Audit Logging Utility"]
+        CronTask["Vercel Cron (/api/cron/retention)\n- Daily Retention Enforcement\n- Keep-Alive Query"]
+    end
+
+    subgraph SupabaseLayer["Supabase Cloud Infrastructure"]
+        AuthService["Supabase Auth (GoTrue)\n- Session Cookies\n- Admin Auth API"]
+        PostgresDB["PostgreSQL Database\n- 10 Domain Tables\n- 100% RLS Enabled\n- PL/pgSQL Atomic Functions"]
+        PrivateStorage["Supabase Storage\n- Bucket: smartprojex-media (Private)\n- Signed URLs (≤ 60s)"]
+    end
+
+    MobileClient -->|HTTPS / Session Cookie| Middleware
+    KioskClient -->|HTTPS / Session Cookie| Middleware
+    AdminClient -->|HTTPS / Session Cookie| Middleware
+
+    Middleware --> RouteHandlers
+    RouteHandlers -->|Supabase Client (RLS)| AuthService
+    RouteHandlers -->|Supabase Client (RLS)| PostgresDB
+    RouteHandlers -->|Service Role (Storage Admin)| PrivateStorage
+    CronTask -->|Bearer CRON_SECRET| RouteHandlers
+```
+
+### 6.3 Diagram Alur Transaksi Dual-Scan Kiosk
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor M as Ketua Kelas / Pengembali
+    actor T as Petugas TU (Operator Loket)
+    participant K as Kiosk Browser UI
+    participant API as Next.js API (/api/kiosk)
+    participant DB as Supabase PostgreSQL
+
+    T->>K: Buka Kiosk di Monitor Meja TU
+    M->>K: Tunjukkan QR Pass (Token 60s)
+    K->>API: POST /api/kiosk/session {student_token}
+    API->>API: Validasi Signature HS256, Exp, Versi Token
+    API->>DB: Periksa status ACTIVE & Ketua Aktif
+    API-->>K: 200 OK (kiosk_session_id aktif 120s)
+    
+    T->>K: Arahkan QR Unit Proyektor ke Kamera
+    K->>API: POST /api/kiosk/unit {projector_code}
+    API->>DB: Query Unit & Status Pinjaman Aktif
+    API-->>K: Detail Unit & Smart Toggle (AVAILABLE / BORROWED)
+    
+    alt Status Unit AVAILABLE (Peminjaman)
+        K->>K: Ambil Foto Peminjam Bersama Proyektor
+        M->>K: Pilih Kondisi ("Normal" / "Kendala")
+        K->>API: POST /api/kiosk/transaction {idempotency_key, photo, condition}
+        API->>DB: Exec process_loan_transaction() [Row Lock FOR UPDATE]
+        DB-->>API: Transaksi ACTIVE, Status Unit BORROWED
+        API-->>K: Notifikasi Berhasil & Reset Sesi
+    else Status Unit BORROWED (Pengembalian)
+        T->>K: Pilih Pengembali (Peminjam / Perwakilan)
+        K->>K: Ambil Foto Unit Saat Pengembalian
+        M->>K: Pilih Kondisi ("Normal" / "Kendala")
+        K->>API: POST /api/kiosk/transaction {idempotency_key, photo, condition}
+        API->>DB: Exec process_loan_transaction() [Row Lock FOR UPDATE]
+        DB-->>API: Transaksi COMPLETED, Status Unit AVAILABLE/MAINTENANCE
+        API-->>K: Notifikasi Berhasil & Reset Sesi
+    end
 ```
 
 ---
 
-## 6. Design Guidelines
+## BAB VII — KEBUTUHAN BASIS DATA
 
-- **Mobile (QR Pass)**: Latar putih bersih, QR di tengah dengan margin cukup, hitung mundur masa berlaku, instruksi menaikkan *brightness*, dan pesan jelas jika koneksi hilang. Tidak ada tombol unduh QR.
-- **Kiosk**: Antarmuka besar dan kontras tinggi, mudah dibaca dari jarak meja. Status ditampilkan dengan warna dan teks: hijau (sukses), merah (gagal), kuning (peringatan/terlambat). Langkah aktif (scan mahasiswa → scan unit → foto → konfirmasi) selalu terlihat.
-- **Konfirmasi kondisi**: Dua tombol besar dan setara bobot visualnya ("Kondisi terlihat normal" dan "Laporkan kendala"), agar melapor tidak terasa sebagai pilihan sulit.
-- **Verifikasi petugas**: Layar verifikasi menampilkan foto wajah dan foto dokumen berdampingan, tiga centang pemeriksaan, dan tombol keputusan; peringatan jika NIM duplikat.
-- **Dashboard**: Kartu ringkasan inventaris di atas (Total, Tersedia, Dipinjam, Terlambat, Perawatan), diikuti daftar terlambat dan tabel riwayat yang dapat difilter.
-- **Bahasa**: Seluruh antarmuka dalam Bahasa Indonesia yang singkat dan jelas.
-- **Aksesibilitas**: Kontras warna memadai dan tidak mengandalkan warna saja untuk menyampaikan status.
+Struktur basis data didefinisikan secara resmi melalui **6 berkas migrasi SQL berurutan** di folder `supabase/migrations/`:
 
----
+### 7.1 Daftar Tabel Domain & Skema Relasional
+1. **`staff_profiles`**: Akun individual staf loket TU (`STAFF`) dan administrator (`ADMIN`).
+   - PK: `id uuid`
+   - Relasi: `auth_user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE`
+   - Kolom: `name varchar(100)`, `role varchar(10) CHECK ('STAFF', 'ADMIN')`, `is_active boolean`
+2. **`classes`**: Struktur rombel kelas baku perkuliahan.
+   - PK: `id uuid`
+   - Unik: `UNIQUE (study_program, cohort_year, section, academic_term)`
+   - Relasi: `leader_student_id uuid REFERENCES public.students(id) ON DELETE SET NULL`
+   - Kolom: `study_program varchar(100)`, `cohort_year smallint`, `section varchar(10)`, `academic_term varchar(20)`, `leader_since timestamptz`, `is_active boolean`
+3. **`students`**: Data profil mahasiswa pendaftar, calon ketua, dan ketua aktif.
+   - PK: `id uuid`
+   - Relasi: `auth_user_id uuid UNIQUE REFERENCES auth.users(id) ON DELETE CASCADE`, `current_class_id uuid REFERENCES public.classes(id) ON DELETE SET NULL` (Keputusan GAP-01), `verified_by uuid REFERENCES public.staff_profiles(id)`
+   - Partial Unique Index: `UNIQUE (nim) WHERE registration_status = 'ACTIVE'`
+   - Kolom: `nim varchar(20)`, `name varchar(100)`, `email varchar(100)`, `registration_status varchar(30)`, `profile_photo_path text`, `verification_document_path text`, `verification_document_type varchar(10)`, `verification_checks jsonb`, `verification_notes text`, `qr_token_version integer DEFAULT 1`, `deactivated_at timestamptz`
+4. **`class_leader_claims`**: Antrean dan jejak keputusan klaim ketua kelas.
+   - PK: `id uuid`
+   - Relasi: `class_id uuid REFERENCES public.classes(id) ON DELETE CASCADE`, `student_id uuid REFERENCES public.students(id) ON DELETE CASCADE`, `decided_by uuid REFERENCES public.staff_profiles(id)`
+   - Partial Unique Index: `UNIQUE (class_id) WHERE claim_type = 'INITIAL' AND status = 'PENDING'`
+   - Kolom: `claim_type varchar(15) CHECK ('INITIAL', 'REPLACEMENT', 'TRANSFER')`, `status varchar(15) CHECK ('PENDING', 'APPROVED', 'REJECTED', 'CANCELLED')`, `notes text`
+5. **`projectors`**: Inventaris fisik aset unit proyektor.
+   - PK: `id uuid`
+   - Unik: `code varchar(30) UNIQUE`
+   - Kolom: `name varchar(100)`, `status varchar(15) DEFAULT 'AVAILABLE' CHECK ('AVAILABLE', 'BORROWED', 'MAINTENANCE', 'INACTIVE')`, `notes text`
+6. **`projector_status_logs`**: Riwayat kronologis perubahan status unit proyektor.
+   - PK: `id uuid`
+   - Relasi: `projector_id uuid REFERENCES public.projectors(id) ON DELETE CASCADE`, `loan_id uuid REFERENCES public.loans(id) ON DELETE SET NULL`, `changed_by uuid REFERENCES public.staff_profiles(id)`
+   - Kolom: `from_status varchar(15)`, `to_status varchar(15)`, `reason text`, `photo_path text`, `idempotency_key varchar(64)`
+7. **`loans`**: Data transaksi peminjaman dan pengembalian unit proyektor.
+   - PK: `id uuid`
+   - Unik: `idempotency_key varchar(64) UNIQUE`
+   - Relasi: `student_id uuid REFERENCES public.students(id) ON DELETE RESTRICT`, `class_id uuid REFERENCES public.classes(id) ON DELETE RESTRICT`, `projector_id uuid REFERENCES public.projectors(id) ON DELETE RESTRICT`, `borrow_processed_by uuid REFERENCES public.staff_profiles(id)`, `return_processed_by uuid REFERENCES public.staff_profiles(id)`
+   - Partial Unique Index 1: `UNIQUE (projector_id) WHERE status = 'ACTIVE'` (Maksimal 1 transaksi aktif per proyektor)
+   - Partial Unique Index 2: `UNIQUE (student_id) WHERE status = 'ACTIVE'` (Maksimal 1 transaksi aktif per ketua kelas)
+   - Kolom: `borrowed_at timestamptz`, `due_at timestamptz`, `borrow_photo_path text`, `borrow_identification_method varchar(15)`, `returned_at timestamptz`, `return_photo_path text`, `returned_by_type varchar(15)`, `returned_by_name varchar(100)`, `return_condition varchar(20)`, `damage_notes text`, `issue_resolved_at timestamptz` (Keputusan GAP-05), `status varchar(15) CHECK ('ACTIVE', 'COMPLETED')`, `photos_deleted_at timestamptz`
+8. **`audit_logs`**: Jejak audit keamanan, privasi, dan operasional sistem (Append-Only).
+   - PK: `id uuid`
+   - Relasi: `actor_staff_id uuid REFERENCES public.staff_profiles(id)`, `actor_student_id uuid REFERENCES public.students(id)`
+   - Kolom: `action varchar(50)`, `entity_type varchar(50)`, `entity_id varchar(64)`, `metadata jsonb DEFAULT '{}'::jsonb`, `created_at timestamptz`
+9. **`kiosk_sessions`**: Sesi Kiosk berumur 120 detik untuk isolasi state transaksi di arsitektur serverless (Keputusan GAP-02).
+   - PK: `id uuid`
+   - Relasi: `student_id uuid REFERENCES public.students(id)`, `class_id uuid REFERENCES public.classes(id)`, `created_by_staff_id uuid REFERENCES public.staff_profiles(id)`
+   - Kolom: `identification_method varchar(15)`, `manual_reason text`, `expires_at timestamptz`, `consumed_at timestamptz`
+10. **`app_settings`**: Tabel konfigurasi kunci-nilai operasional sistem (Keputusan GAP-04).
+    - PK: `key varchar(50)`
+    - Kolom: `value jsonb NOT NULL`, `description text`, `updated_by uuid REFERENCES public.staff_profiles(id)`, `updated_at timestamptz`
 
-## 7. Arsitektur & Data
+### 7.2 Fungsi Atomik Basis Data (Stored Procedures)
+- `process_loan_transaction`: Fungsi PL/pgSQL utama untuk eksekusi transaksi peminjaman dan pengembalian. Berjalan dengan hak `SECURITY DEFINER`, mengunci baris unit dengan `SELECT ... FOR UPDATE`, menegakkan idempotensi via `idempotency_key`, melakukan Smart Toggle status, dan memperbarui `loans` serta `projectors` dalam satu transaksi all-or-nothing.
+- `transfer_class_leader`: Fungsi PL/pgSQL atomik untuk memvalidasi pemohon ketua aktif, mengunci baris rombel kelas, memperbarui ketua kelas baru, menaikkan `qr_token_version` ketua lama, mencatat klaim `TRANSFER`, dan mencatat audit log.
+- `revoke_student_qr_pass`: Fungsi PL/pgSQL untuk menaikkan versi token QR mahasiswa secara atomik.
 
-### 7.1 Gambaran Arsitektur
-- **Frontend**: Next.js 15 (App Router) + Tailwind CSS, dengan tiga area: `(student)` untuk registrasi dan QR Pass, `kiosk` untuk transaksi, dan `admin` untuk verifikasi, kelas, dashboard, dan inventaris.
-- **Backend**: Route Handlers Next.js di Vercel; akses data memakai Supabase. *Service role key* hanya dipakai di server.
-- **Auth**: Supabase Auth untuk mahasiswa (email) dan petugas/admin (akun individual, peran dari tabel `staff_profiles`).
-- **Storage**: Satu bucket privat dengan prefix: `faces/`, `documents/`, `loans/`. Basis data menyimpan path, akses melalui signed URL berumur pendek.
-- **QR Pass**: Token bertanda tangan HMAC (HS256) berisi `sub` (id mahasiswa), `v` (versi token), dan `exp` (60 detik). Server menolak token jika tanda tangan salah, kedaluwarsa, versi tidak sama, akun bukan `ACTIVE`, atau mahasiswa bukan ketua aktif.
-- **Sesi Kiosk**: Setelah token valid, server membuat `kiosk_session_id` berumur maksimal 120 detik yang terikat ke mahasiswa, sehingga transaksi tidak bergantung pada token 60 detik. UI Kiosk tetap mereset sesi setelah 30 detik tanpa aktivitas.
-- **Tugas terjadwal** (Vercel Cron, harian): hapus foto kedaluwarsa, tandai ketua kedaluwarsa, hitung pemakaian storage, dan melakukan kueri ringan agar project free tidak dijeda.
-
-### 7.2 Skema Basis Data (ringkasan)
-Semua kolom waktu bertipe `timestamptz`. Kolom status memakai `CHECK` constraint atau enum, bukan `varchar` bebas. Semua tabel memakai Row Level Security.
-
-**`staff_profiles`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| auth_user_id | uuid unik | Akun Supabase Auth |
-| name | varchar(100) | |
-| role | varchar(10) | `STAFF` / `ADMIN` |
-| is_active | boolean | default true |
-| created_at | timestamptz | |
-
-**`classes`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| study_program | varchar(100) | Program studi |
-| cohort_year | smallint | Angkatan |
-| section | varchar(10) | Rombel (A/B/C) |
-| academic_term | varchar(20) | Mis. `2026/2027-GANJIL` |
-| leader_student_id | uuid FK → students, null | Ketua aktif |
-| leader_since | timestamptz, null | |
-| is_active | boolean | |
-| | | `UNIQUE (study_program, cohort_year, section, academic_term)` |
-
-**`students`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| auth_user_id | uuid unik | Akun Supabase Auth |
-| nim | varchar(20) | Tidak unik secara global; lihat indeks di bawah |
-| name | varchar(100) | |
-| email | varchar(100) | |
-| registration_status | varchar(30) | `UNVERIFIED_EMAIL`, `PENDING_DOCUMENT`, `PENDING_REVIEW`, `ACTIVE`, `REJECTED`, `RESUBMISSION_REQUIRED`, `INACTIVE` |
-| profile_photo_path | text, null | Path storage foto wajah referensi |
-| verification_document_path | text, null | Path sementara; dikosongkan setelah foto dihapus |
-| verification_document_type | varchar(10), null | `KTM` / `KTP` |
-| verification_checks | jsonb, null | `{face_match, name_match, status_confirmed}` |
-| verification_notes | text, null | Alasan penolakan/perbaikan |
-| verified_by | uuid FK → staff_profiles, null | |
-| verified_at | timestamptz, null | |
-| qr_token_version | integer | default 1; dinaikkan saat QR dicabut |
-| deactivated_at | timestamptz, null | Dasar perhitungan retensi |
-| created_at, updated_at | timestamptz | |
-
-Keaktifan akun diturunkan dari `registration_status = 'ACTIVE'`; tidak ada kolom `is_active` terpisah.
-
-**`class_leader_claims`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| class_id | uuid FK → classes | |
-| student_id | uuid FK → students | |
-| claim_type | varchar(15) | `INITIAL`, `REPLACEMENT`, `TRANSFER` |
-| status | varchar(15) | `PENDING`, `APPROVED`, `REJECTED`, `CANCELLED` |
-| decided_by | uuid FK → staff_profiles, null | Null untuk `TRANSFER` yang otomatis |
-| decided_at | timestamptz, null | |
-| notes | text, null | |
-| created_at | timestamptz | |
-
-**`projectors`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| code | varchar(30) unik | Kode aset yang dikodekan dalam QR unit |
-| name | varchar(100) | |
-| status | varchar(15) | `AVAILABLE`, `BORROWED`, `MAINTENANCE`, `INACTIVE` |
-| notes | text, null | |
-| created_at, updated_at | timestamptz | |
-
-**`projector_status_logs`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| projector_id | uuid FK | |
-| from_status, to_status | varchar(15) | |
-| reason | text, null | |
-| photo_path | text, null | Foto kendala opsional |
-| loan_id | uuid FK → loans, null | |
-| changed_by | uuid FK → staff_profiles, null | Null jika diubah otomatis oleh transaksi |
-| created_at | timestamptz | |
-
-**`loans`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| idempotency_key | varchar(64) unik | |
-| student_id | uuid FK → students | Peminjam (ketua kelas) |
-| class_id | uuid FK → classes | Kelas saat meminjam |
-| projector_id | uuid FK → projectors | |
-| borrowed_at | timestamptz | Waktu server |
-| due_at | timestamptz | Batas waktu kembali |
-| borrow_photo_path | text, null | Null setelah foto dihapus (retensi) |
-| borrow_identification_method | varchar(15) | `QR` / `MANUAL_LOOKUP` |
-| borrow_processed_by | uuid FK → staff_profiles | Petugas yang memproses |
-| returned_at | timestamptz, null | |
-| return_photo_path | text, null | |
-| returned_by_type | varchar(15), null | `BORROWER` / `REPRESENTATIVE` |
-| returned_by_name | varchar(100), null | Nama perwakilan |
-| return_processed_by | uuid FK → staff_profiles, null | |
-| return_condition | varchar(20), null | `NORMAL` / `REPORTED_ISSUE` |
-| damage_notes | text, null | |
-| status | varchar(15) | `ACTIVE` / `COMPLETED` |
-| photos_deleted_at | timestamptz, null | Diisi tugas retensi |
-| created_at, updated_at | timestamptz | |
-
-**`audit_logs`**
-| Kolom | Tipe | Keterangan |
-|-------|------|-----------|
-| id | uuid PK | |
-| actor_staff_id | uuid FK, null | |
-| actor_student_id | uuid FK, null | |
-| action | varchar(50) | Mis. `VERIFICATION_DECIDED`, `PHOTO_SIGNED_URL`, `QR_REVOKED`, `MANUAL_LOOKUP` |
-| entity_type, entity_id | varchar / uuid | |
-| metadata | jsonb | Tanpa data sensitif |
-| created_at | timestamptz | |
-
-**Indeks dan batasan penting**
-- `UNIQUE (nim) WHERE registration_status = 'ACTIVE'` (partial): satu NIM aktif; pendaftar ganda lain tetap dapat berada di antrean dan ditandai.
-- `UNIQUE (projector_id) WHERE status = 'ACTIVE'` pada `loans`: satu transaksi aktif per unit.
-- `UNIQUE (student_id) WHERE status = 'ACTIVE'` pada `loans`: satu transaksi aktif per ketua kelas.
-- `UNIQUE (class_id) WHERE claim_type = 'INITIAL' AND status = 'PENDING'` pada `class_leader_claims`: satu calon ketua awal per kelas.
-- `loans.due_at` terindeks untuk kueri keterlambatan (status `ACTIVE` dan `due_at < now()`).
-- Pengaturan seperti jam operasional dan jumlah jam default pinjam disimpan di tabel kunci-nilai `app_settings`.
-
-**Fungsi atomik `process_loan_transaction`** (dipanggil server): memvalidasi sesi/akun/ketua aktif, memilih alur dari status unit di dalam transaksi basis data (`SELECT ... FOR UPDATE` pada unit), membuat atau menutup `loans`, memperbarui `projectors.status`, menulis `projector_status_logs`, dan mengembalikan hasil. Idempotency key yang sama mengembalikan hasil sebelumnya.
-
-### 7.3 Endpoint API
-| Method | Path | Input utama | Output / efek | Akses |
-|--------|------|-------------|---------------|-------|
-| GET | `/api/classes` | `?term=current` | Daftar kelas aktif | Mahasiswa terautentikasi / Petugas |
-| POST | `/api/students/profile` | `nim, name, class_id` | Profil + klaim ketua `PENDING`; status `UNVERIFIED_EMAIL` | Mahasiswa terautentikasi |
-| GET | `/api/students/me/qr` | – | `{token, expires_at}` | Mahasiswa `ACTIVE` dan ketua aktif |
-| POST | `/api/students/me/qr/revoke` | – | `qr_token_version` naik | Mahasiswa `ACTIVE` |
-| POST | `/api/students/me/leader/claim` | `class_id` | Klaim `INITIAL`/`REPLACEMENT` baru (mis. semester baru) | Mahasiswa `ACTIVE` |
-| POST | `/api/students/me/leader/transfer` | `target_student_id` | Jabatan pindah; QR lama dicabut | Ketua aktif |
-| GET | `/api/admin/verifications` | `?status=PENDING_REVIEW` | Antrean verifikasi dan klaim | Petugas / Admin |
-| POST | `/api/admin/verifications/:studentId/photos` | `face_photo_base64, document_photo_base64, document_type` | Simpan path privat; status `PENDING_REVIEW` | Petugas |
-| PATCH | `/api/admin/verifications/:studentId` | `decision, notes, checks` | Status baru; foto dokumen dihapus; audit log | Petugas / Admin |
-| PATCH | `/api/admin/leader-claims/:id` | `decision, notes` | Ketua kelas ditetapkan/ditolak; audit log | Petugas / Admin |
-| POST | `/api/kiosk/session` | `student_token` atau `student_id + reason` (manual) | `kiosk_session_id`, ringkasan mahasiswa | Petugas |
-| POST | `/api/kiosk/students/search` | `q` (NIM/nama) | Daftar ketua aktif | Petugas |
-| POST | `/api/kiosk/unit` | `projector_code` | Detail unit, status, peminjam aktif dan `due_at` | Petugas |
-| POST | `/api/kiosk/transaction` | `idempotency_key, projector_code, kiosk_session_id?, photo_base64, condition (NORMAL/ISSUE), issue_notes?, returner{type,name?}` | Hasil transaksi; aksi pinjam/kembali ditentukan server dari status unit | Petugas |
-| GET | `/api/admin/loans` | `?status=ACTIVE\|OVERDUE\|COMPLETED` | Riwayat dan daftar terlambat | Petugas / Admin |
-| POST | `/api/admin/photos/sign` | `path` | Signed URL ≤ 60 detik; audit log | Petugas / Admin |
-| GET / POST | `/api/admin/projectors` | data unit | Daftar / tambah unit | Admin |
-| PATCH | `/api/admin/projectors/:id` | data unit | Ubah / nonaktifkan unit | Admin |
-| PATCH | `/api/admin/projectors/:id/status` | `status, reason, photo_base64?` | Ubah status; tulis log status | Petugas / Admin |
-| GET / POST / PATCH | `/api/admin/classes` | data kelas | Kelola kelas dan semester; lepas ketua | Admin |
-| GET | `/api/admin/export/loans` | `?from&to` | CSV riwayat transaksi | Admin |
-| GET | `/api/cron/retention` | header rahasia Vercel Cron | Hapus foto kedaluwarsa, tandai ketua kedaluwarsa, hitung storage | Sistem |
-
-Catatan keamanan: token QR tidak pernah dikirim melalui query string; seluruh pencarian dan sesi Kiosk memakai `POST`. Aksi pinjam/kembali tidak dikirim klien, tetapi ditentukan server.
-
-### 7.4 Struktur Folder
-```
-smartprojex/
-├── src/
-│   ├── app/
-│   │   ├── (student)/
-│   │   │   ├── register/page.tsx
-│   │   │   └── my-qr/page.tsx
-│   │   ├── kiosk/page.tsx
-│   │   ├── admin/
-│   │   │   ├── page.tsx                 # Dashboard + terlambat
-│   │   │   ├── verifications/page.tsx   # Antrean verifikasi & klaim ketua
-│   │   │   ├── classes/page.tsx         # Kelas & semester
-│   │   │   └── projectors/page.tsx      # Inventaris
-│   │   └── api/
-│   │       ├── classes/
-│   │       ├── students/
-│   │       ├── kiosk/
-│   │       ├── admin/
-│   │       └── cron/retention/route.ts
-│   ├── components/
-│   │   ├── registration/RegistrationForm.tsx
-│   │   ├── admin/VerificationCapture.tsx
-│   │   ├── kiosk/ScannerView.tsx
-│   │   └── kiosk/ConfirmationPanel.tsx
-│   └── lib/
-│       ├── qr-token.ts       # Tanda tangan & verifikasi token QR
-│       ├── audit.ts          # Penulisan audit log
-│       ├── image.ts          # Kompres foto di klien
-│       └── supabase/
-├── supabase/
-│   └── migrations/           # Skema, RLS, fungsi atomik, indeks
-└── PRD.md
-```
-
----
-## 8. Tech Stack
-
-| Lapisan | Pilihan | Catatan |
-|---------|---------|---------|
-| Framework | Next.js 15 (App Router) | Route Handlers untuk API |
-| Styling | Tailwind CSS | Responsif untuk HP dan laptop |
-| Database | Supabase (PostgreSQL) | RLS aktif, fungsi atomik untuk transaksi |
-| Auth | Supabase Auth | Email mahasiswa; akun individual petugas/admin |
-| Storage | Supabase Storage | Satu bucket privat, signed URL singkat |
-| QR | `qrcode.react` (tampil), `html5-qrcode` (baca) | Kiosk membaca QR via webcam |
-| Token QR | `jose` (HS256) | Token berumur 60 detik, tanda tangan di server |
-| Hosting | Vercel (Hobby) | Cron harian untuk retensi dan *keep-alive* |
-| Ekspor | CSV dari server | Cadangan manual mingguan |
-
-**Tidak dipakai pada MVP**: `tesseract.js` / OCR, library pengenalan wajah, penyimpanan di browser untuk data transaksi.
+### 7.3 Kebijakan RLS (Row Level Security) & Keamanan Fungsi
+- RLS aktif 100% pada seluruh 10 tabel domain dan objek Supabase Storage.
+- Helper functions `is_active_staff()` dan `is_active_admin()` mengevaluasi keabsahan peran petugas langsung dari `staff_profiles`.
+- Sesuai Migrasi 6 (`20261106000006_security_hardening.sql`), seluruh fungsi transaksional diamankan dengan mencabut hak eksekusi (`REVOKE EXECUTE`) dari publik, `anon`, dan `authenticated`, membatasi eksekusi secara eksklusif untuk `service_role`, serta menetapkan jalur aman `SET search_path = public, pg_temp`.
 
 ---
 
-## 9. Decision Log & Open Questions
+## BAB VIII — KEAMANAN DAN PRIVASI (SECURITY & PRIVACY)
 
-### 9.1 Decision Log
-| # | Keputusan | Alasan |
-|---|-----------|--------|
-| D-01 | Verifikasi ketua kelas dilakukan tatap muka oleh petugas, bukan otomatis. | Tidak ada akses database kampus; petugas sudah hadir di meja TU. |
-| D-02 | KTP dan KTM diterima setara sebagai dokumen verifikasi. | UNIMED belum menerbitkan KTM untuk semua mahasiswa; KTP dimiliki umum. |
-| D-03 | OCR ditunda dari MVP; sistem tidak menyimpan NIK atau teks dokumen. | KTP tidak memuat NIM, verifikasi tatap muka sudah cukup, dan data KTP lebih sensitif. |
-| D-04 | Foto dokumen dihapus segera setelah keputusan; foto wajah referensi disimpan selama akun aktif. | Prinsip minimisasi data; penyimpanan foto wajah referensi diterima sebagai kebijakan proyek. |
-| D-05 | Hanya ketua kelas aktif yang dapat meminjam. Ketua ditentukan lewat klaim pendaftar pertama per kelas yang disetujui petugas. | Sesuai aturan yang berlaku saat ini dan menghindari petugas mengelola daftar ketua kelas. |
-| D-06 | Kelas dipilih dari daftar baku (prodi + angkatan + rombel + semester). | Mencegah duplikasi kelas akibat input bebas. |
-| D-07 | Klaim kelas yang sudah punya ketua tidak berlaku otomatis; ketua dapat mengalihkan jabatan; status ketua kedaluwarsa tiap semester. | Mencegah penyerobotan jabatan dan akun ketua usang. |
-| D-08 | QR Pass memakai token bertanda tangan berumur 60 detik, bukan token statis, dan tanpa tombol unduh. | Tangkapan layar QR tidak dapat dibagikan atau dipakai ulang. |
-| D-09 | Foto wajah tidak dicocokkan otomatis; petugas membandingkan secara visual. | Menghindari kompleksitas dan risiko *facial recognition*. |
-| D-10 | Konfirmasi kondisi hanya dua pilihan (normal / laporkan kendala), tersedia saat menerima maupun mengembalikan. | Menjaga transaksi cepat tanpa checklist, dan memberi jalur melapor yang setara saat menerima. |
-| D-11 | Setiap transaksi memiliki `due_at` dan keterlambatan dilacak, tanpa sanksi otomatis. | Menggantikan fungsi pengikat KTP fisik dengan pemantauan. |
-| D-12 | Aksi pinjam/kembali ditentukan server, bukan klien. | Menghindari ketidakcocokan status dan manipulasi. |
-| D-13 | Pengembalian dapat dilakukan peminjam atau perwakilan yang dicatat petugas. | Menyelesaikan kebutuhan pengembalian oleh orang lain tanpa akun tambahan. |
-| D-14 | Jalur cadangan pencarian manual tersedia di Kiosk. | HP mati atau QR gagal tidak boleh menghentikan peminjaman. |
-| D-15 | Satu transaksi aktif per unit dan per ketua kelas, dijamin oleh indeks basis data. | Integritas data tidak hanya bergantung pada logika aplikasi. |
-| D-16 | Serah-terima langsung antar kelas dan peminjaman banyak unit ditunda dari MVP. | Mengurangi kompleksitas awal. |
-
-### 9.2 Open Questions
-| # | Pertanyaan | Default MVP jika belum dijawab |
-|---|-----------|--------------------------------|
-| Q-01 | Apakah "kelas" adalah rombel tetap per prodi + angkatan, atau kelas per mata kuliah yang ketuanya dapat berbeda? | Rombel tetap per prodi + angkatan + semester. |
-| Q-02 | Apakah email umum (Gmail) diperbolehkan, atau harus email kampus? | Email umum diperbolehkan; verifikasi sesungguhnya dilakukan petugas tatap muka. |
-| Q-03 | Berapa batas waktu pinjam yang resmi? | Akhir jam operasional TU pada hari peminjaman. |
-| Q-04 | Siapa yang menentukan tanggung jawab dan sanksi jika unit rusak, hilang, atau terlambat? | TU/kampus di luar sistem; sistem hanya menyediakan bukti. |
-| Q-05 | Apakah kampus/TU resmi menyetujui sistem ini, dan siapa penanggung jawab data? | Dijalankan sebagai pilot dengan persetujuan TU; penanggung jawab data ditetapkan sebelum pilot. |
-| Q-06 | Apakah masa retensi default pada NFR-08 dapat diterima, atau kampus memiliki aturan sendiri? | Memakai default NFR-08. |
-| Q-07 | Bagaimana petugas memastikan status mahasiswa/ketua kelas saat verifikasi (mis. KRS di HP, tanya langsung, konfirmasi prodi)? | Ditentukan TU; hasilnya dicatat lewat centang `status_confirmed`. |
+1. **Role-Based Access Control (RBAC)**:
+   Akses dilindungi lapis ganda di sisi server: Middleware/Layout Guards memeriksa JWT sesi dan mencocokkan peran di `staff_profiles`, sementara RLS database menolak kueri yang tidak memiliki otorisasi semestinya.
+2. **Pemisahan Akun Petugas (Zero Shared Accounts)**:
+   Sesuai NFR-03, setiap staf loket TU memiliki akun login pribadi. Seluruh aksi pencatatan transaksi, verifikasi dokumen, dan pergantian status unit mencatat `staff_id` aktual yang dapat diaudit.
+3. **Keamanan QR Pass Dinamis**:
+   Token QR dienkripsi dan ditandatangani menggunakan kunci simetris `QR_TOKEN_SECRET` (HS256 256-bit). Umur token dibatasi 60 detik. Token tidak memuat NIM atau data PII sensitif. Pembagian screenshot digagalkan oleh masa kedaluwarsa yang pendek dan kemampuan pencabutan token mandiri via kenaikan versi token.
+4. **Penyimpanan Foto Privat & Signed URL Berumur Pendek**:
+   Seluruh foto (foto wajah referensi dan foto dokumentasi serah terima) disimpan dalam bucket privat `smartprojex-media` yang tidak dapat diakses secara publik. Akses tampilan foto di dashboard admin wajib melalui *Signed URL* berdurasi maksimal 60 detik. Setiap pembuatan Signed URL menghasilkan entri audit log `PHOTO_SIGNED_URL_GENERATED`.
+5. **Kebijakan Penghapusan Dokumen Identitas Instan**:
+   Sistem PINJAM menerapkan prinsip minimisasi data (*data minimization*). Foto kartu identitas (KTM/KTP) hanya disimpan sementara di storage selama mahasiswa berada dalam antrean verifikasi. Segera setelah staf TU membuat keputusan (Approve/Reject/Resubmission), berkas fisik foto kartu identitas **langsung dihapus secara permanen dari Supabase Storage** dan path-nya dikosongkan dari basis data. Sistem tidak pernah menyimpan NIK atau teks bacaan dokumen.
+6. **Batasan Penggunaan Foto Wajah Referensi**:
+   Foto wajah referensi hanya disimpan selama akun berstatus `ACTIVE` dan digunakan semata-mata sebagai pembanding visual manual oleh staf manusia di meja loket Kiosk. Dilarang keras membuat fitur ekstraksi biometrik, *face embedding*, atau pencocokan wajah otomatis.
+7. **Pembersihan Otomatis Masa Retensi Data**:
+   Endpoint Vercel Cron `/api/cron/retention` dilindungi oleh header otentikasi `Authorization: Bearer CRON_SECRET` dan dieksekusi setiap hari pada pukul 01:00 UTC (08:00 WIB) untuk:
+   - Menghapus foto transaksi berstatus `COMPLETED` yang berumur > 180 hari (kecuali terkait kendala yang belum terselesaikan).
+   - Menghapus foto wajah referensi dari akun yang telah berstatus `INACTIVE` lebih dari 90 hari.
+   - Menandai ketua kelas yang masa berlaku semesternya telah berakhir.
 
 ---
 
-## 10. Timeline
+## BAB IX — KRITERIA PENERIMAAN (ACCEPTANCE CRITERIA)
 
-Estimasi pengembangan 12 hari kerja, diikuti pilot paralel. Hari kerja dihitung dari awal pengerjaan, bukan tanggal kalender.
+Kriteria penerimaan dievaluasi melalui matriks verifikasi berjenjang dengan pemisahan tegas antara pengujian otomatis, integrasi alur, simulasi muatan data, dan pengujian fisik lapangan:
 
-| Fase | Hari | Hasil | Catatan |
-|------|------|-------|---------|
-| **Fase 0 — Uji perangkat keras** | 1 | Uji webcam laptop asli: membaca QR layar HP, membaca QR stiker unit, dan memotret wajah bersama proyektor dalam satu frame. | Hasil menentukan posisi kamera, ukuran/posisi stiker QR, dan apakah perlu kamera tambahan. |
-| **Fase 1 — Fondasi** | 2 - 3 | Setup project, skema database, RLS, fungsi atomik, akun petugas/admin, token QR. | Termasuk indeks partial unique dan `app_settings`. |
-| **Fase 2 — Registrasi & ketua kelas** | 4 - 5 | Registrasi, antrean verifikasi tatap muka, klaim ketua, pengalihan jabatan, QR Pass. | Tanpa OCR. |
-| **Fase 3 — Kiosk inti** | 6 - 8 | Pemindaian ganda, foto, konfirmasi, transaksi atomik, pengembalian oleh perwakilan, pencarian manual. | Termasuk idempotency. |
-| **Fase 4 — Admin & pemantauan** | 9 - 10 | Dashboard, daftar terlambat, inventaris unit, status log, kelas/semester, audit log. | |
-| **Fase 5 — Uji & retensi** | 11 - 12 | Cron retensi, ekspor CSV, uji alur lengkap dan edge case. | Ukur waktu transaksi dengan stopwatch. |
-| **Pilot paralel** | 1 - 2 minggu setelahnya | 1 - 2 unit proyektor dipakai bersamaan dengan buku besar manual. | Evaluasi metrik di bagian 1.4 sebelum penggunaan penuh. |
+### 9.1 Automated Tests (Vitest Unit & Component Suite)
+- **Status**: `LULUS 100% (READY)`
+- **Bukti**: 56 berkas pengujian lulus tanpa kegagalan (551 test case lulus, 19 skipped untuk live db connection, 0 error).
+- **Cakupan Pengujian**:
+  - `atomic-loan-logic.test.ts`: Validasi race condition dan logika peminjaman atomik.
+  - `qr-token.test.ts` & `qr-pass-api.test.ts`: Pengujian tanda tangan token HS256, expiration, dan pencabutan token.
+  - `universal-login-backend.test.ts`: Pengujian otentikasi universal berbasis peran.
+  - `kiosk-transaction-api.test.ts` & `kiosk-workflow.test.ts`: Pengujian alur dual-scan, idempotensi, dan Smart Toggle.
+  - `admin-staff-api.test.ts`, `classes-management.test.ts`, `admin-projectors-api.test.ts`: Pengujian CRUD administratif dan otorisasi RBAC.
+  - `retention-logic.test.ts` & `cron-api.test.ts`: Pengujian logika retensi data dan proteksi cron.
 
-**Ketergantungan di luar kode**: persetujuan TU, jawaban Open Questions Q-01 sampai Q-07, pencetakan stiker QR unit, dan sesi onboarding petugas. Hal ini harus berjalan paralel dengan Fase 1 - 2.
+### 9.2 TypeScript Typecheck & Production Build
+- **Status**: `LULUS 100% (READY)`
+- **Bukti**: Perintah `npx tsc --noEmit` mengembalikan exit code `0` tanpa peringatan tipe. Perintah `npm run build` sukses mengompilasi 41 rute statis dan dinamis Next.js 15.
 
----
+### 9.3 Controlled Staging Integration & Browser UAT (25 Skenario Workflow)
+- **Status**: `LULUS 100% DI STAGING (PASS)`
+- **Bukti**: Didokumentasikan pada `PINJAM_STAGE24_11_CONTROLLED_UAT_REPORT.md` dan `PINJAM_STAGE24_13_FINAL_UAT_CLOSURE.md`:
+  - 25 Skenario alur administratif, autentikasi, klaim ketua kelas, siklus akun staf, ekspor CSV, dan isolasi rute RBAC teruji secara nyata melalui interaksi browser dan panggilan API di lingkungan Vercel Staging.
 
-## 11. Risiko & Mitigasi
+### 9.4 Simulated Hardware & Image Payload Tests (12 Skenario Staging)
+- **Status**: `LULUS PADA LEVEL API & DATA (PASS)`
+- **Bukti**: Didokumentasikan pada `PINJAM_STAGE24_12_PHYSICAL_UAT_REPORT.md`:
+  - 12 Skenario transaksi Kiosk dan unggah citra teruji pada level endpoint API staging menggunakan simulasi muatan citra terkompresi (JPEG buffer < 250 KB) dan payload transaksi terkontrol untuk memverifikasi kontrak endpoint, RLS storage, idempotensi, dan mutasi status basis data.
+  - **Batasan Bukti Eksplisit**: Pengujian ini memvalidasi kebenaran logika backend dan kontrak API, namun **tidak melibatkan perangkat webcam laptop fisik secara langsung maupun serah terima fisik unit proyektor di meja loket nyata**.
 
-| # | Risiko | Dampak | Mitigasi |
-|---|--------|--------|----------|
-| R-01 | Webcam fixed-focus kesulitan membaca QR HP dan QR unit, dan satu kamera harus melayani tiga tugas. | Transaksi lambat. | Fase 0 uji perangkat nyata; QR berukuran cukup, kontras tinggi, jalur cadangan pencarian manual. |
-| R-02 | Penyerobotan klaim ketua kelas atau NIM orang lain. | Ketua palsu / ketua asli terblokir. | Persetujuan petugas tatap muka, klaim penggantian tidak otomatis, penanda NIM duplikat, pelepasan ketua oleh admin. |
-| R-03 | Pembagian QR atau tangkapan layar. | Peminjam palsu. | Token berumur 60 detik, tanpa tombol unduh, foto transaksi, pencabutan QR. |
-| R-04 | Verifikasi wajah manual tidak dijalankan petugas. | Foto hanya jadi bukti sesudah kejadian. | Tampilkan foto wajah referensi berdampingan di Kiosk saat identifikasi manual; foto transaksi tetap tersedia sebagai bukti. |
-| R-05 | Tidak ada jaminan fisik, unit terlambat atau tidak kembali. | Kehilangan aset. | `due_at`, daftar belum kembali, kebijakan sanksi TU di luar sistem (Q-04). |
-| R-06 | Konfirmasi kondisi "normal" ditekan tanpa dilihat. | Bukti kerusakan lemah. | Foto transaksi sebagai pembanding, tombol "Laporkan kendala" setara saat menerima dan mengembalikan, pemeriksaan petugas bila ada indikasi. |
-| R-07 | Free-tier Supabase dijeda, kuota storage 1 GB habis, tanpa backup. | Sistem berhenti, data hilang. | Cron harian sebagai *keep-alive*, retensi foto, peringatan 70% kuota, ekspor CSV mingguan, prosedur manual (NFR-10). |
-| R-08 | Internet atau layanan mati. | Transaksi terhenti. | Prosedur buku besar manual lalu input belakangan. |
-| R-09 | Data foto wajah dan dokumen dianggap sensitif oleh pihak kampus/mahasiswa. | Penolakan pengguna. | Persetujuan eksplisit, bucket privat, signed URL singkat, audit akses, foto dokumen dihapus segera, tanpa NIK tersimpan. |
-| R-10 | Registrasi tatap muka menumpuk di awal semester. | Antrean pindah ke TU. | Hanya ketua kelas yang mendaftar; sesi verifikasi dijadwalkan per kelas. |
-| R-11 | Satu laptop dan satu petugas sebagai titik tunggal kegagalan. | Layanan terhenti. | Akun individual agar petugas lain dapat menggantikan; prosedur manual. |
-| R-12 | Persetujuan kampus belum ada. | Proyek tidak dapat dipakai. | Tentukan penanggung jawab dan mulai sebagai pilot (Q-05). |
+### 9.5 Physical Hardware & Operational Campus Pilot (Fase 0 Pilot)
+- **Status**: `PENDING / TO BE CONDUCTED ON CAMPUS`
+- **Catatan**: Pengujian operasional nyata—meliputi performa pembacaan QR ponsel di depan lensa webcam laptop fisik, pembacaan QR stiker pada bodi proyektor nyata, dan interaksi fisik serah terima di meja loket TU FMIPA UNIMED—dijadwalkan untuk dilaksanakan saat pelaksanaan pilot kampus (Fase 0 Pilot) bersama staf loket TU.
 
----
-
-## 12. Glosarium
-
-| Istilah | Arti |
-|---------|------|
-| **Dual-Scan** | Pemindaian dua QR dalam satu transaksi: QR Pass ketua kelas dan QR unit proyektor. |
-| **QR Pass** | QR di HP ketua kelas berisi token bertanda tangan berumur 60 detik. |
-| **Kiosk** | Halaman di laptop petugas untuk memindai QR, mengambil foto, dan menyelesaikan transaksi. |
-| **Smart Toggle** | Logika server yang menentukan pinjam atau kembali dari status unit. |
-| **Klaim ketua kelas** | Pengajuan seorang mahasiswa sebagai ketua suatu kelas; pendaftar pertama pada kelas tanpa ketua, disetujui petugas. |
-| **Foto wajah referensi** | Foto wajah yang diambil petugas saat verifikasi, dipakai sebagai pembanding visual manual. |
-| **Idempotency key** | Kunci unik pada permintaan transaksi agar pengiriman ulang tidak membuat transaksi ganda. |
-| **Jalur cadangan** | Pencarian manual ketua kelas oleh petugas ketika QR tidak dapat dipakai. |
-| **`due_at`** | Batas waktu pengembalian suatu transaksi. |
-| **Terlambat** | Transaksi `ACTIVE` dengan `due_at` yang sudah lewat. |
-| **Rombel** | Kelompok kelas tetap dalam satu prodi dan angkatan (mis. A, B, C). |
+### 9.6 Production Verification & Live Smoke Test
+- **Status**: `PENDING INFRASTRUCTURE (BLOCKED)`
+- **Catatan**: Verifikasi smoke test live di lingkungan produksi sebenarnya belum dapat dilaksanakan karena masih menunggu penyediaan proyek Supabase Production dan domain resmi dari pemilik sistem.
 
 ---
 
-## 13. Riwayat Perubahan
+## BAB X — KEBUTUHAN DEPLOYMENT & OPERASIONAL
 
-| Versi | Tanggal | Perubahan |
-|-------|---------|-----------|
-| Revisi 3 | 5 November 2026 | **Verifikasi**: KTP dan KTM diterima setara; OCR dihapus dari MVP; foto wajah dan dokumen diambil petugas di perangkat petugas; foto dokumen dihapus setelah keputusan; NIK tidak disimpan. **Ketua kelas**: klaim pendaftar pertama per kelas yang disetujui petugas, penggantian, pengalihan jabatan, reset semester, kelas dipilih dari daftar baku. **Keamanan**: QR Pass berupa token bertanda tangan 60 detik tanpa tombol unduh; akun petugas individual dengan matriks hak akses; audit log; endpoint Kiosk memakai POST. **Alur**: batas waktu pengembalian dan daftar terlambat; opsi "Laporkan kendala" saat menerima; pengembalian oleh perwakilan; jalur cadangan pencarian manual; satu pinjaman aktif per ketua kelas. **Data**: tabel baru `staff_profiles`, `classes`, `class_leader_claims`, `projector_status_logs`, `audit_logs`; `loans` mendapat `due_at` dan kolom petugas; path storage menggantikan URL; `timestamptz`; indeks *partial unique*; idempotency key. **Operasional**: retensi default, cron, ekspor CSV, prosedur cadangan manual, Fase 0 uji perangkat keras, pilot paralel, metrik dan risiko diperbarui. |
-| Revisi 2 | Sebelumnya | Versi yang diunggah (dasar revisi ini). |
+### 10.1 Manajemen Lingkungan (Environments)
+1. **Development**: Lingkungan lokal pengembang menggunakan `.env.local` dan branch fitur.
+2. **Staging**: Lingkungan pengujian live di Vercel Preview/Staging (`https://pinjam-staging-git-staging-keegangibrans-projects.vercel.app`) yang terhubung ke Supabase Staging (`pnylslnqxsgymjhuimrl`).
+3. **Production**: Lingkungan resmi kampus yang terhubung ke branch `main` (commit `c5449e2`, tag `v1.0.0`).
+
+### 10.2 Prasyarat Infrastruktur Produksi yang Wajib Disediakan Pemilik Sistem
+Sebelum deployment produksi dapat dinyatakan live, pemilik sistem wajib memenuhi 5 kebutuhan eksternal:
+1. **Proyek Supabase Production**: Proyek baru terpisah di Supabase Cloud (Region Singapore) dengan aktivasi Point-in-Time Recovery (PITR).
+2. **Penyediaan Layanan Custom SMTP**: Kredensial server mail resmi kampus atau transactional mail provider untuk Supabase Auth guna menghindari rate limit email pendaftaran mahasiswa.
+3. **Domain Resmi Kampus & DNS**: Penetapan subdomain resmi (misal `pinjam.unimed.ac.id`) dan konfigurasi DNS CNAME ke Vercel (`cname.vercel-dns.com`).
+4. **Environment Variables Target Production di Vercel**:
+   - `NEXT_PUBLIC_SUPABASE_URL`
+   - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
+   - `SUPABASE_SERVICE_ROLE_KEY`
+   - `QR_TOKEN_SECRET` (String acak kriptografis baru minimal 32 karakter)
+   - `CRON_SECRET` (String acak otentikasi Vercel Cron)
+   - `NEXT_PUBLIC_APP_TIMEZONE=Asia/Jakarta`
+   - `NEXT_PUBLIC_SITE_URL` (Domain resmi kampus)
+5. **Identitas Administrator Pertama**: Nama lengkap dan alamat email resmi pejabat/staf TU yang ditugaskan sebagai administrator utama untuk bootstrap akun pertama.
+
+### 10.3 Prosedur Rollback Darurat
+Jika terjadi kendala runtime kritis pasca peluncuran produksi:
+- **Tingkat 1 (Vercel Instant Rollback)**: Menggunakan fitur satu klik rollback di dashboard Vercel untuk mengalihkan domain ke build stabil sebelumnya dalam < 1 menit.
+- **Tingkat 2 (Git Rollback)**: Melakukan reset branch `main` ke commit awal `d74c282` dan menghapus tag rilis remote `v1.0.0`.
+- **Tingkat 3 (Database Rollback)**: Memanfaatkan PITR Supabase untuk mengembalikan snapshot basis data sebelum migrasi.
+
+---
+
+## BAB XI — RIWAYAT REVISI DOKUMEN
+
+| Versi PRD | Tanggal | Penulis / Reviewer | Deskripsi Perubahan Utama |
+|---|---|---|---|
+| **Revisi 1** | Oktober 2026 | Tim Analis Sistem | Draf awal spesifikasi sistem peminjaman proyektor kampus. |
+| **Revisi 2** | Awal November 2026 | Tim Analis Sistem | Penambahan spesifikasi awal Kiosk dual-scan dan verifikasi identitas. |
+| **Revisi 3** | 5 November 2026 | Tim Arsitek & Analis | **Penyelarasan Baseline PRD Revisi 3**: Kesetaraan KTP dan KTM tanpa OCR; penghapusan instan foto dokumen pascakeputusan; penegakan aturan ketua kelas via klaim rombel baku; QR token HS256 60 detik; Smart Toggle status unit; penambahan tabel `staff_profiles`, `classes`, `class_leader_claims`, `projector_status_logs`, `audit_logs`; partial unique index; dan batas waktu pengembalian `due_at`. |
+| **v1.0.0** | 24 November 2026 | Tim Dokumentasi & Arsitek | **Penyelarasan Komprehensif Rilis v1.0.0**: Sinkronisasi formal dengan implementasi nyata pada Git Release `c5449e2` (tag `v1.0.0`). Integrasi penuh seluruh keputusan desain klarifikasi GAP-01 s.d. GAP-08 (`students.current_class_id`, `kiosk_sessions`, `app_settings`, `loans.issue_resolved_at`, status verifikasi, transfer kepemimpinan 1-langkah atomik). Pembaruan status fungsional FT-00 s.d. FT-04 menjadi `IMPLEMENTED`. Penambahan diagram arsitektur komponen dan sequence Kiosk aktual. Dokumentasi bukti kelulusan 551 automated tests dan 37/37 skenario UAT. Penegasan status infrastruktur produksi yang menunggu penyediaan pihak kampus. |
+
+---
+
+*Dokumen ini disahkan sebagai acuan spesifikasi teknis dan operasional resmi aplikasi PINJAM (SmartProjex) Versi 1.0.0.*
